@@ -27,7 +27,8 @@ Require-Bundle: org.eclipse.ui,
  ccw.clojure;bundle-version="1.3.0",
  clojure.osgi;bundle-version="1.3.0",
  org.clojure.tools.nrepl;bundle-version="0.0.5",
- ccw.org.clojure.core.incubator;bundle-version="0.1.0"
+ ccw.org.clojure.core.incubator;bundle-version="0.1.0",
+ org.eclipse.zest.dot.ui;bundle-version="2.0.0"
 Bundle-ClassPath: .,
  src/clj/,
  classes/
