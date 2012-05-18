@@ -415,7 +415,7 @@ public class ClojureOutlinePage extends ContentOutlinePage {
 		lastSelection = selection;
 		if (viewer != null && selection instanceof TextSelection) {
 			TextSelection textSelection = (TextSelection) selection;
-			new ClojureVisualization(getSite()).graphFor(textSelection.getText());
+			new ClojureVisualization().viewGraph(textSelection.getText(), getSite());
 			int line = textSelection.getStartLine();
 			StructuredSelection newSelection = findClosest(line + 1);
 			ISelection oldSelection = viewer.getSelection();

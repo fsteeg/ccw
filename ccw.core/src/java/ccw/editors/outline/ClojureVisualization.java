@@ -30,19 +30,10 @@ import clojure.lang.LispReader.ReaderException;
  */
 class ClojureVisualization {
 
-  private IPageSite site;
-
-  ClojureVisualization(IPageSite site) {
-    this.site = site;
-  }
-
-  void graphFor(String text) {
-    if (!text.trim().isEmpty()) {
+  void viewGraph(String clojure, IPageSite site) {
+    if (!clojure.trim().isEmpty()) {
       try {
-        Object o = LispReader.read(new LineNumberingPushbackReader(
-            new StringReader(text)), false, new Object(), false);
-        String dot = String.format("digraph {rankdir=TD; \n%s\n}",
-            toDot(new StringBuilder(), o));
+        String dot = dotForClojure(clojure);
         ZestGraphView view = (ZestGraphView) site.getPage().findView(
             ZestGraphView.ID);
         if (view != null)
@@ -53,6 +44,14 @@ class ClojureVisualization {
         throw new RuntimeException(e);
       }
     }
+  }
+
+  String dotForClojure(String text) {
+    Object o = LispReader.read(new LineNumberingPushbackReader(
+        new StringReader(text)), false, new Object(), false);
+    String dot = String.format("digraph {rankdir=TD; \n%s\n}",
+        toDot(new StringBuilder(), o));
+    return dot;
   }
 
   private StringBuilder toDot(StringBuilder dot, Object o) {
@@ -106,8 +105,9 @@ class ClojureVisualization {
 
   private StringBuilder draw(StringBuilder dot, String source, Object o) {
     String target = id(o);
+    String label = o == null ? "null" : o.toString();
     return isCollection(o) ? dot = toDot(dot.append(edge(source, target)), o)
-        : dot.append(node(target, o.toString())).append(edge(source, target));
+        : dot.append(node(target, label)).append(edge(source, target));
   }
 
   private String edge(String source, String target) {
