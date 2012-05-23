@@ -52,13 +52,14 @@ public class ClojureVisualizationTests {
         // some edge cases: nil, empty strucures
         { "[nil 3 4]",/* -> */"GraphModel {4 nodes, 3 connections}" },
         { "[]",/* -> */"GraphModel {1 nodes, 0 connections}" },
-        // treating identical value as separate nodes works for strings
+        // treating identical value as separate nodes
         { "[\"a\" \"b\"]",/* -> */"GraphModel {3 nodes, 2 connections}" },
         { "[\"a\" \"a\"]",/* -> */"GraphModel {3 nodes, 2 connections}" },
+        { "[:a :a]",/* -> */"GraphModel {3 nodes, 2 connections}" },
+        { "[1 1]",/* -> */"GraphModel {3 nodes, 2 connections}" },
     // TODO
     // { "nil",/* -> */"GraphModel {1 nodes, 0 connections}" },
-    // { "[1 1]",/* -> */"GraphModel {3 nodes, 2 connections}" },
-    // { "[:a :a]",/* -> */"GraphModel {3 nodes, 2 connections}" },
+    // { "[nil nil]",/* -> */"GraphModel {3 nodes, 2 connections}" },
     };
     return Arrays.asList(tests);
   }

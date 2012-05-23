@@ -120,7 +120,7 @@ class ClojureVisualization {
 
   private static String id(Object o) {
     return hasSameReference(o) ? Integer.toString(new Object().hashCode())
-            : Integer.toString(System.identityHashCode(o)); // FIXME ID for nums
+            : Integer.toString(System.identityHashCode(o));
   }
 
   /**
@@ -132,7 +132,7 @@ class ClojureVisualization {
    * @return true if some objects of this Class could have the same reference.
    */
   private static boolean hasSameReference(Object o) {
-    return o instanceof Keyword;
+    return o instanceof Keyword || o instanceof Number;
   }
 
 }
