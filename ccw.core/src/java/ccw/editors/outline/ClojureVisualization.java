@@ -12,15 +12,10 @@ package ccw.editors.outline;
 import java.io.StringReader;
 import java.util.Iterator;
 
+import clojure.lang.*;
 import org.eclipse.ui.part.IPageSite;
 import org.eclipse.zest.internal.dot.ZestGraphView;
 
-import clojure.lang.APersistentMap;
-import clojure.lang.APersistentSet;
-import clojure.lang.APersistentVector;
-import clojure.lang.ASeq;
-import clojure.lang.LineNumberingPushbackReader;
-import clojure.lang.LispReader;
 import clojure.lang.LispReader.ReaderException;
 
 /**
@@ -123,7 +118,21 @@ class ClojureVisualization {
         || o instanceof APersistentMap || o instanceof APersistentSet;
   }
 
-  private String id(Object o) {
-    return Integer.toString(System.identityHashCode(o)); // FIXME ID for nums
+  private static String id(Object o) {
+    return hasSameReference(o) ? Integer.toString(new Object().hashCode())
+            : Integer.toString(System.identityHashCode(o)); // FIXME ID for nums
   }
+
+  /**
+   * Method checks that object's class is special. Some objects of this class could have the same reference.
+   * Like {@link clojure.lang.Keyword} class. In clojure code <b>keywords</b> with the same name have the
+   * same reference too.
+   *
+   * @param o object to inspect
+   * @return true if some objects of this Class could have the same reference.
+   */
+  private static boolean hasSameReference(Object o) {
+    return o instanceof Keyword;
+  }
+
 }
