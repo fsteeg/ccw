@@ -1,9 +1,12 @@
 package ccw.editors.clojure;
 
+import static ccw.preferences.PreferenceConstants.isReplExplicitLoggingMode;
+
 import org.eclipse.core.runtime.Assert;
 import org.eclipse.jface.action.Action;
 
 import ccw.CCWPlugin;
+import ccw.preferences.PreferenceConstants;
 import ccw.repl.Actions;
 import ccw.repl.REPLView;
 
@@ -22,6 +25,10 @@ public class SwitchNamespaceAction extends Action {
 
     public void run() {
         REPLView repl = REPLView.activeREPL.get();
+        run(repl, editor, true);
+    }
+
+    public static void run(REPLView repl, ClojureEditor editor, boolean activateREPL) {
         if (repl == null || repl.isDisposed()) {
 
             return;
@@ -32,9 +39,9 @@ public class SwitchNamespaceAction extends Action {
             // put error msg in footer instead
             CCWPlugin.logError("Could not switch ns to: " + ns);
         } else {
-            EvaluateTextUtil.evaluateText(repl, String.format(";; Switching to %s namespace", ns), true);
-            EvaluateTextUtil.evaluateText(repl, String.format("(clojure.core/in-ns '%s)", ns), false);
-            Actions.ShowActiveREPL.execute(true);
+            EvaluateTextUtil.evaluateText(repl, String.format(";; Switching to %s namespace", ns), isReplExplicitLoggingMode());
+            EvaluateTextUtil.evaluateText(repl, String.format("(in-ns '%s)", ns), false);
+            Actions.ShowActiveREPL.execute(activateREPL);
         }
     }
 }

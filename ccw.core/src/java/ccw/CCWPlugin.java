@@ -14,7 +14,7 @@ package ccw;
 
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.util.List;
+import java.util.Map;
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.CoreException;
@@ -44,11 +44,15 @@ import org.osgi.framework.BundleContext;
 
 import ccw.editors.clojure.IScanContext;
 import ccw.launching.LaunchUtils;
+import ccw.nature.AutomaticNatureAdder;
 import ccw.preferences.PreferenceConstants;
 import ccw.preferences.SyntaxColoringPreferencePage;
 import ccw.repl.REPLView;
 import ccw.util.BundleUtils;
 import ccw.util.DisplayUtil;
+import ccw.util.ITracer;
+import ccw.util.NullTracer;
+import ccw.util.Tracer;
 import clojure.lang.Keyword;
 import clojure.lang.Var;
 import clojure.osgi.ClojureOSGi;
@@ -60,7 +64,7 @@ import clojure.tools.nrepl.Connection;
 public class CCWPlugin extends AbstractUIPlugin {
 
     /** The plug-in ID */
-    public static final String PLUGIN_ID = "ccw";
+    public static final String PLUGIN_ID = "ccw.core";
 
     /** 
      * @param swtKey a key from SWT.COLOR_xxx
@@ -71,6 +75,12 @@ public class CCWPlugin extends AbstractUIPlugin {
 		return Display.getDefault().getSystemColor(swtKey); 
 	}
 	
+	
+	//SHOULD LOG INFO / WARN / ERROR WHEN THE APPROPRIATE FLAGS ARE SET SO THAT ONE DOES NOT HAVE
+	//TO GO FROM ONE FILE TO ANOTHER
+	//ALSO CONSIDER VARIANTS FOR STACKTRACE, 
+	//RAW STRING (no format), etc.
+	
     /** The shared instance */
     private static CCWPlugin plugin;
 
@@ -80,11 +90,25 @@ public class CCWPlugin extends AbstractUIPlugin {
     
     private ServerSocket ackREPLServer;
     
+	private AutomaticNatureAdder natureAdapter = new AutomaticNatureAdder();
+
+	private ITracer tracer = NullTracer.INSTANCE;
+	
+	public static ITracer getTracer() {
+		return getDefault().tracer;
+	}
+    
     public synchronized void startREPLServer() throws CoreException {
     	if (ackREPLServer == null) {
 	        try {
-	        	Var startServer = BundleUtils.requireAndGetVar(this.getBundle().getSymbolicName(), "clojure.tools.nrepl/start-server");
-	            ackREPLServer = (ServerSocket)((List)startServer.invoke()).get(0);
+	        	Var startServer = BundleUtils.requireAndGetVar(getBundle().getSymbolicName(), "clojure.tools.nrepl.server/start-server");
+	        	Object defaultHandler = BundleUtils.requireAndGetVar(
+	        	        getBundle().getSymbolicName(),
+	        	        "clojure.tools.nrepl.server/default-handler").invoke();
+	        	Object handler = BundleUtils.requireAndGetVar(
+	        	        getBundle().getSymbolicName(),
+	        	        "clojure.tools.nrepl.ack/handle-ack").invoke(defaultHandler);
+	            ackREPLServer = (ServerSocket)((Map)startServer.invoke(Keyword.intern("handler"), handler)).get(Keyword.intern("server-socket"));
 	            CCWPlugin.log("Started ccw nREPL server: nrepl://localhost:" + ackREPLServer.getLocalPort());
 	        } catch (Exception e) {
 	            CCWPlugin.logError("Could not start plugin-hosted REPL server", e);
@@ -101,18 +125,22 @@ public class CCWPlugin extends AbstractUIPlugin {
     }
 
     public CCWPlugin() {
-//    	System.out.println("CCWPlugin instanciated");
     }
     
     public void start(BundleContext context) throws Exception {
-//    	System.out.println("CCWPlugin start() starts");
         super.start(context);
         plugin = this;
+        
+        tracer = new Tracer(context, TraceOptions.getTraceOptions());
+
         startClojureCode(context);
+        
         if (System.getProperty("ccw.autostartnrepl") != null) {
         	startREPLServer();
         }
-//    	System.out.println("CCWPlugin start() ends");
+        
+        this.natureAdapter.start();
+        
     }
     
     private synchronized void createColorCache() {
@@ -179,7 +207,6 @@ public class CCWPlugin extends AbstractUIPlugin {
     private void startClojureCode(BundleContext bundleContext) throws Exception {
 //    	ClojureOSGi.loadAOTClass(bundleContext, "ccw.editors.clojure.ClojureFormat");
     	
-    	ClojureOSGi.require(bundleContext, "ccw.util.bundle-utils");
     	ClojureOSGi.require(bundleContext, "ccw.editors.clojure.hyperlink");
     	
     	ClojureOSGi.require(bundleContext, "ccw.editors.clojure.editor-support");
@@ -190,14 +217,18 @@ public class CCWPlugin extends AbstractUIPlugin {
     	ClojureOSGi.require(bundleContext, "ccw.debug.clientrepl");
     	ClojureOSGi.require(bundleContext, "ccw.debug.serverrepl"); // <= to enable REPLView 
     	                                                            //    server-side tooling
-    	ClojureOSGi.require(bundleContext, "ccw.static-analysis");
+    	ClojureOSGi.require(bundleContext, "paredit.static-analysis");
     }
     
     public void stop(BundleContext context) throws Exception {
+    	
     	// We don't remove colors when deregistered, because, well, we don't have a
     	// corresponding method on the ColorRegistry instance!
     	// We also don't remove fonts when deregistered
     	stopREPLServer();
+    	
+    	this.natureAdapter.stop();
+    	
         plugin = null;
         super.stop(context);
     }
@@ -220,14 +251,17 @@ public class CCWPlugin extends AbstractUIPlugin {
     }
 
     public static void logError(String msg) {
+    	getTracer().trace(TraceOptions.LOG_ERROR, "ERROR  - " + msg);
         plugin.getLog().log(new Status(IStatus.ERROR, PLUGIN_ID, msg));
     }
 
     public static void logError(String msg, Throwable e) {
+    	getTracer().trace(TraceOptions.LOG_ERROR, e, "ERROR  - " + msg);
         plugin.getLog().log(new Status(IStatus.ERROR, PLUGIN_ID, msg, e));
     }
 
     public static void logError(Throwable e) {
+    	getTracer().trace(TraceOptions.LOG_ERROR, e, "ERROR  - ");
         plugin.getLog().log(
                 new Status(IStatus.ERROR, PLUGIN_ID, e.getMessage(), e));
     }
@@ -241,19 +275,23 @@ public class CCWPlugin extends AbstractUIPlugin {
     }
     
     public static void logWarning(String msg) {
+    	getTracer().trace(TraceOptions.LOG_WARNING, "WARNING - " + msg);
         plugin.getLog().log(new Status(IStatus.WARNING, PLUGIN_ID, msg));
     }
 
     public static void logWarning(String msg, Throwable e) {
+    	getTracer().trace(TraceOptions.LOG_WARNING, e, "WARNING - " + msg);
         plugin.getLog().log(new Status(IStatus.WARNING, PLUGIN_ID, msg, e));
     }
 
     public static void logWarning(Throwable e) {
+    	getTracer().trace(TraceOptions.LOG_WARNING, e);
         plugin.getLog().log(
                 new Status(IStatus.WARNING, PLUGIN_ID, e.getMessage(), e));
     }
 
     public static void log (String msg) {
+    	getTracer().trace(TraceOptions.LOG_INFO, "INFO   - " + msg);
         plugin.getLog().log(new Status(IStatus.INFO, PLUGIN_ID, msg));
     }
     
@@ -290,7 +328,7 @@ public class CCWPlugin extends AbstractUIPlugin {
 		                        REPLView replView = (REPLView)v;
 		                        ILaunch launch = replView.getLaunch();
 		                        if (launch!=null && !launch.isTerminated()) {
-		                            String launchProject = launch.getAttribute(LaunchUtils.ATTR_PROJECT_NAME);
+		                            String launchProject = LaunchUtils.getProjectName(launch);
 		                            if (launchProject != null && launchProject.equals(project.getName())) {
 		                            	ret[0] = replView;
 		                                return;

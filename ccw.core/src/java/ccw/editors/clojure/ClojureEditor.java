@@ -28,12 +28,12 @@ import org.eclipse.jface.text.source.DefaultCharacterPairMatcher;
 import org.eclipse.jface.text.source.ISourceViewer;
 import org.eclipse.jface.text.source.IVerticalRuler;
 import org.eclipse.jface.text.source.projection.ProjectionSupport;
+import org.eclipse.jface.util.IPropertyChangeListener;
 import org.eclipse.jface.util.PropertyChangeEvent;
 import org.eclipse.jface.viewers.ISelectionProvider;
+import org.eclipse.swt.events.DisposeEvent;
+import org.eclipse.swt.events.DisposeListener;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.ui.IEditorInput;
-import org.eclipse.ui.IEditorSite;
-import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.editors.text.TextEditor;
 import org.eclipse.ui.texteditor.SourceViewerDecorationSupport;
 import org.eclipse.ui.texteditor.StatusLineContributionItem;
@@ -42,19 +42,54 @@ import org.eclipse.ui.views.contentoutline.IContentOutlinePage;
 import ccw.CCWPlugin;
 import ccw.editors.outline.ClojureOutlinePage;
 import ccw.launching.ClojureLaunchShortcut;
+import ccw.preferences.PreferenceConstants;
 import ccw.repl.REPLView;
-import ccw.util.ClojureUtils;
-import clojure.osgi.ClojureOSGi;
+import ccw.util.ClojureInvoker;
+import ccw.util.StringUtils;
 
 public class ClojureEditor extends TextEditor implements IClojureEditor {
-    private static final String EDITOR_SUPPORT_NS = "ccw.editors.clojure.editor-support";
-    static {
-    	try {
-			ClojureOSGi.require(CCWPlugin.getDefault().getBundle().getBundleContext(), EDITOR_SUPPORT_NS);
-		} catch (Exception e) {
-			throw new RuntimeException(e);
+
+	/**
+	 * Shortens a namespace name,
+	 * e.g. net.cgrand.parsley.core => n.c.parsley.core.
+	 * @param namespace
+	 * @return
+	 */
+	private String shortenNamespace(String namespace) {
+		String[] segments = namespace.split("\\.");
+		int nextToLast = segments.length - 2;
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < nextToLast; i++) {
+			sb.append(segments[i].charAt(0));
+			sb.append('.');
 		}
-    }
+		if (nextToLast >= 0) {
+			sb.append(segments[nextToLast]);
+			sb.append('.');
+		}
+		sb.append(segments[nextToLast + 1]);
+		return sb.toString();
+	}
+	
+	public void updatePartNameAndDescription() {
+		String partName = getEditorInput().getName();
+		String contentDescription = "";
+
+		final String maybeNamespace = this.findDeclaringNamespace();
+		if (!StringUtils.isEmpty(maybeNamespace)) {
+			if (getPreferenceStore().getBoolean(PreferenceConstants.EDITOR_DISPLAY_NAMESPACE_IN_TABS)) {
+				partName = shortenNamespace(maybeNamespace);
+			}
+			contentDescription = String.format("Namespace %s", maybeNamespace);
+		}
+		
+		this.setPartName(partName);
+		this.setContentDescription(contentDescription);
+	}
+	
+	private static final ClojureInvoker editorSupport = ClojureInvoker.newInvoker(
+            CCWPlugin.getDefault(),
+            "ccw.editors.clojure.editor-support");
 
     public static final String EDITOR_REFERENCE_HELP_CONTEXT_ID = "ccw.branding.editor_context_help";
 
@@ -78,17 +113,12 @@ public class ClojureEditor extends TextEditor implements IClojureEditor {
         setHelpContextId(EDITOR_REFERENCE_HELP_CONTEXT_ID);
 	}
 	
-	@Override
-	public void init(IEditorSite site, IEditorInput input) throws PartInitException {
-		super.init(site, input);
-	}
-	
 	ClojureSourceViewer viewer; // TODO try a way of removing this horrible hack 
 								// (currently if I replace viewer in configureSourceViewerDecorationSupport(),
 								// there's a NPE thrown due to initialization ordering issue
 	@Override
 	protected void configureSourceViewerDecorationSupport(SourceViewerDecorationSupport support) {
-		ClojureUtils.invoke(EDITOR_SUPPORT_NS, "configureSourceViewerDecorationSupport", support, viewer);
+		editorSupport._("configureSourceViewerDecorationSupport", support, viewer);
 		super.configureSourceViewerDecorationSupport(support);
 	}
 
@@ -114,9 +144,6 @@ public class ClojureEditor extends TextEditor implements IClojureEditor {
 		return viewer;
 	}
 
-	/*
-	 * @see org.eclipse.ui.texteditor.ExtendedTextEditor#createPartControl(org.eclipse.swt.widgets.Composite)
-	 */
 	public void createPartControl(Composite parent) {
 		super.createPartControl(parent);
 		ClojureSourceViewer viewer= (ClojureSourceViewer) getSourceViewer();
@@ -139,8 +166,32 @@ public class ClojureEditor extends TextEditor implements IClojureEditor {
 		
 		fProjectionSupport.install();
 		viewer.doOperation(ClojureSourceViewer.TOGGLE);
-	}
 
+		updatePartNameAndDescription();
+		
+		final IPropertyChangeListener prefsListener = new IPropertyChangeListener() {
+			@Override
+			public void propertyChange(PropertyChangeEvent event) {
+				if (event.getProperty().equals(PreferenceConstants.EDITOR_DISPLAY_NAMESPACE_IN_TABS)) {
+					updatePartNameAndDescription();
+				}
+			}
+		};
+		getPreferenceStore().addPropertyChangeListener(prefsListener);
+		parent.addDisposeListener(new DisposeListener() {
+			@Override
+			public void widgetDisposed(DisposeEvent e) {
+				getPreferenceStore().removePropertyChangeListener(prefsListener);
+			}
+		});
+	}
+	
+	@Override
+	protected void editorSaved() {
+		super.editorSaved();
+		updatePartNameAndDescription();
+	}
+	
 	/**
 	 * Updates the status fields for the given category.
 	 *
@@ -541,13 +592,17 @@ public class ClojureEditor extends TextEditor implements IClojureEditor {
 	}
 	
 	public REPLView getCorrespondingREPL () {
-		IFile file = (IFile) getEditorInput().getAdapter(IFile.class);
-		if (file != null) {
-			return CCWPlugin.getDefault().getProjectREPL(file.getProject());
-		} else {
-			// Last resort : we return the current active REPL, if any
-			return REPLView.activeREPL.get();
-		}
+		// Experiment: always return the active REPL instead of a potentially
+		//             better match being a REPL started from same project as the file
+//		IFile file = (IFile) getEditorInput().getAdapter(IFile.class);
+//		if (file != null) {
+//			REPLView repl = CCWPlugin.getDefault().getProjectREPL(file.getProject());
+//			if (repl !=  null) {
+//				return repl;
+//			}
+//		}
+//		// Last resort : we return the current active REPL, if any
+		return REPLView.activeREPL.get();
 	}
 
 	/*
@@ -666,4 +721,6 @@ public class ClojureEditor extends TextEditor implements IClojureEditor {
 	public boolean isEscapeInStringLiteralsEnabled() {
 		return sourceViewer().isEscapeInStringLiteralsEnabled();
 	}
+	
+	
 }

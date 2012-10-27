@@ -79,9 +79,11 @@ public class PreferenceInitializer extends AbstractPreferenceInitializer {
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.callableGLOBAL_VAR_Token), true, literalRGB, true, false),
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.keywordToken), true, stringKeywordLiteralRGB, false, false),
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.metaToken), true, metaRGB, false, true),
+        new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.readerLiteralTag), true, metaRGB, false, true),
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.MACRO_Token), false, new RGB(0, 0, 0), false, false),
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.callableMACRO_Token), true, callableRGB, true, false),
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.stringToken), true, stringKeywordLiteralRGB, false, false),
+        new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.otherLiteralsToken), true, literalRGB, false, false),
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.regexToken), true, stringKeywordLiteralRGB, false, false),
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.intToken), false, new RGB(0, 0, 0), false, false),
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.floatToken), false, new RGB(0, 0, 0), false, false),
@@ -100,16 +102,23 @@ public class PreferenceInitializer extends AbstractPreferenceInitializer {
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.rainbowParenLevel5), true, new RGB(122, 176, 204), false, false),
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.rainbowParenLevel6), true, new RGB(122, 122, 204), false, false),
         new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.rainbowParenLevel7), true, new RGB(176, 122, 204), false, false),
-        new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.rainbowParenLevel8), true, new RGB(204, 122, 176), false, false)
+        new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.rainbowParenLevel8), true, new RGB(204, 122, 176), false, false),
+        new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.replLogValue), true, new RGB(0, 0x80, 0), false, false),
+        new SyntaxColoringDefault(PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.replLogError), true, new RGB(0x80, 0, 0), false, false),
     };
     
 	@Override
 	public void initializeDefaultPreferences() {
 	    IPreferenceStore store = CCWPlugin.getDefault().getPreferenceStore();
+	    
+	    store.setDefault(PreferenceConstants.CCW_GENERAL_AUTOMATIC_NATURE_ADDITION, true);
+	    
 	    store.setDefault(org.eclipse.jdt.ui.PreferenceConstants.EDITOR_MATCHING_BRACKETS, true);
 	    store.setDefault(org.eclipse.jdt.ui.PreferenceConstants.EDITOR_MATCHING_BRACKETS_COLOR, 
                 StringConverter.asString(new RGB(150, 150, 150)));
 	    store.setDefault(PreferenceConstants.EDITOR_ESCAPE_ON_PASTE, false);
+	    store.setDefault(PreferenceConstants.EDITOR_CODE_COMPLETION_AUTO_ACTIVATE, true);
+	    store.setDefault(PreferenceConstants.EDITOR_DISPLAY_NAMESPACE_IN_TABS, true);
 	    store.setDefault(AbstractDecoratedTextEditorPreferenceConstants.EDITOR_TAB_WIDTH, 2);
 	    store.setDefault(PreferenceConstants.SWITCH_TO_NS_ON_REPL_STARTUP, true);
 	    store.setDefault(USE_STRICT_STRUCTURAL_EDITING_MODE_BY_DEFAULT, false);
@@ -127,5 +136,7 @@ public class PreferenceInitializer extends AbstractPreferenceInitializer {
 	        store.setDefault(SyntaxColoringPreferencePage.getBoldPreferenceKey(d.getPreferenceConstant()), d.isBold());
 	        store.setDefault(SyntaxColoringPreferencePage.getItalicPreferenceKey(d.getPreferenceConstant()), d.isItalic());
 	    }
+	    
+	    store.setDefault(PreferenceConstants.REPL_QUIET_LOGGING_MODE, false);
 	}
 }
