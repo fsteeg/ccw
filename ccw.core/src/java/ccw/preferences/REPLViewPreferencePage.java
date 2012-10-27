@@ -23,7 +23,7 @@ public class REPLViewPreferencePage extends FieldEditorPreferencePage implements
     public REPLViewPreferencePage() {
         super(GRID);
         setPreferenceStore(CCWPlugin.getDefault().getPreferenceStore());
-        setDescription(Messages.ClojurePreferencePage_Description); 
+        setDescription(Messages.ClojureREPLPreferencePage_Description); 
     }
 
     /**
@@ -42,6 +42,11 @@ public class REPLViewPreferencePage extends FieldEditorPreferencePage implements
     	addField(new BooleanFieldEditor(
     			ccw.preferences.PreferenceConstants.REPL_VIEW_DISPLAY_HINTS, 
     			Messages.REPLViewPreferencePage_displayHint, 
+    			getFieldEditorParent()));
+
+    	addField(new BooleanFieldEditor(
+    			ccw.preferences.PreferenceConstants.REPL_QUIET_LOGGING_MODE, 
+    			Messages.REPLViewPreferencePage_quietLoggingMode, 
     			getFieldEditorParent()));
 
     }

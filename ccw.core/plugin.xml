@@ -179,6 +179,10 @@
                               property="org.eclipse.debug.ui.matchesPattern"
                               value="*.clj">
                         </test>
+                        <test
+                              forcePluginActivation="true"
+                              property="ccw.propertyTester.hasClojureNature">
+                        </test>
                      </and>
                   </iterate>
                </with>
@@ -198,11 +202,13 @@
       <editor
             class="ccw.editors.clojure.ClojureEditor"
             default="true"
-            extensions="clj, cljs"
             contributorClass="ccw.editors.clojure.BasicClojureEditorActionContributor"
             icon="icons/clojure16x16.png"
             id="ccw.clojureeditor"
             name="Clojure Editor">
+         <contentTypeBinding
+               contentTypeId="ccw.core.clj">
+         </contentTypeBinding>
       </editor>
    </extension>
    <extension
@@ -282,6 +288,12 @@
       </command>
       <command
             categoryId="org.eclipse.ui.category.edit"
+            description="%command.spliceSexp.description"
+            id="ccw.ui.edit.text.clojure.splice.sexpr"
+            name="%command.spliceSexp.name">
+      </command>
+      <command
+            categoryId="org.eclipse.ui.category.edit"
             description="%command.splitSexpr.description"
             id="ccw.ui.edit.text.clojure.split.sexpr"
             name="%command.splitSexpr.name">
@@ -299,6 +311,7 @@
             name="%command.switchStructuralEditionMode.name">
       </command>	  
 <!-- navigate -->
+
       <command
             categoryId="org.eclipse.ui.category.navigate"
             description="%command.gotoPreviousMember.description"
@@ -410,10 +423,21 @@
       </command>
       <command
             categoryId="org.eclipse.debug.ui.category.run"
+            description="Forcibly interrupt the currently-running evaluation for this session."
+            id="ccw.view.repl.commands.interrupt"
+            name="Interrupt Evaluation">
+      </command>
+      <command
+            categoryId="org.eclipse.debug.ui.category.run"
             description="Clear the REPL&apos;s log"
             id="ccw.view.repl.commands.clearLog"
             name="Clear REPL log">
       </command>
+      <command
+            categoryId="org.eclipse.debug.ui.category.run"
+            description="Open a new REPL session connected to this REPL's Clojure process."
+            id="ccw.view.repl.commands.newSession"
+            name="New Session"/>
       <command
             categoryId="org.eclipse.debug.ui.category.run"
             description="Show the console for the JVM process to which this REPL is connected"
@@ -422,7 +446,7 @@
       </command>
       <command
             categoryId="org.eclipse.debug.ui.category.run"
-            defaultHandler="ccw.repl.Actions$ConnecToEclipseNREPL"
+            defaultHandler="ccw.repl.Actions$ConnectToEclipseNREPL"
             description="New REPL client for Eclipse embedded nrepl server (advanced usages)"
             id="ccw.ui.repl.connectToEclipseNREPL"
             name="New REPL client for Eclipse embedded nrepl server (advanced usages)">
@@ -457,6 +481,11 @@
             id="ccw.ui.edit.text.clojure.switch.rainbow.parens"
             name="%command.switchRainbowParens.name">
       </command>
+      <command
+            description="%ccw.core.command.toggle-clojure-nature.description"
+            id="ccw.core.command.toggle-clojure-nature"
+            name="%ccw.core.command.toggle-clojure-nature.name">
+      </command>
       
    </extension>
    
@@ -471,10 +500,18 @@
             commandId="ccw.ui.edit.text.clojure.goto.matching.bracket"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"/>
       <key
-            sequence="M2+M3+ARROW_UP"
-            contextId="ccw.ui.clojureEditorScope"
             commandId="ccw.ui.edit.text.clojure.expand.selection.up"
-            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"/>
+            contextId="ccw.ui.clojureEditorScope"
+            platform="win32"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M2+M3+ARROW_UP">
+      </key>
+      <key
+            commandId="ccw.ui.edit.text.clojure.expand.selection.up"
+            contextId="ccw.ui.clojureEditorScope"
+            platform="gtk"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M2+M3+ARROW_UP"/>
       <key
             sequence="M2+M1+ARROW_UP"
             contextId="ccw.ui.clojureEditorScope"
@@ -484,6 +521,14 @@
       <key
             commandId="ccw.ui.edit.text.clojure.expand.selection.left"
             contextId="ccw.ui.clojureEditorScope"
+            platform="win32"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M2+M3+ARROW_LEFT">
+      </key>
+      <key
+            commandId="ccw.ui.edit.text.clojure.expand.selection.left"
+            contextId="ccw.ui.clojureEditorScope"
+            platform="gtk"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M2+M3+ARROW_LEFT">
       </key>
@@ -497,6 +542,14 @@
       <key
             commandId="ccw.ui.edit.text.clojure.expand.selection.right"
             contextId="ccw.ui.clojureEditorScope"
+            platform="win32"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M2+M3+ARROW_RIGHT">
+      </key>
+      <key
+            commandId="ccw.ui.edit.text.clojure.expand.selection.right"
+            contextId="ccw.ui.clojureEditorScope"
+            platform="gtk"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M2+M3+ARROW_RIGHT">
       </key>
@@ -508,14 +561,16 @@
             platform="carbon">
       </key>
       <key
-            commandId="ccw.ui.edit.text.clojure.indent.selection"
+            commandId="ccw.ui.edit.text.clojure.select.last"
             contextId="ccw.ui.clojureEditorScope"
+            platform="win32"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
-            sequence="M1+I">
+            sequence="M2+M3+ARROW_DOWN">
       </key>
       <key
             commandId="ccw.ui.edit.text.clojure.select.last"
             contextId="ccw.ui.clojureEditorScope"
+            platform="gtk"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M2+M3+ARROW_DOWN">
       </key>
@@ -531,6 +586,19 @@
             contextId="ccw.ui.clojureEditorScope"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M3+R">
+      </key>
+      <key
+            commandId="ccw.ui.edit.text.clojure.splice.sexpr"
+            contextId="ccw.ui.clojureEditorScope"
+            platform="carbon"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M4+S">
+      </key>
+      <key
+            commandId="ccw.ui.edit.text.clojure.indent.selection"
+            contextId="ccw.ui.clojureEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+I">
       </key>
       <key
             commandId="ccw.ui.edit.text.clojure.split.sexpr"
@@ -571,17 +639,6 @@
             commandId="ccw.ui.edit.text.clojure.select.toplevel.s.expression"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"/>
       <key
-            sequence="M1+M3+X"
-            contextId="ccw.ui.clojureEditorScope"
-            commandId="ccw.ui.edit.text.clojure.evaluate.toplevel.s.expression"
-            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"/>
-      <key
-            sequence="M1+M2+X"
-            contextId="ccw.ui.clojureEditorScope"
-            commandId="ccw.ui.edit.text.clojure.evaluate.toplevel.s.expression"
-            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
-            platform="carbon"/>
-      <key
             commandId="ccw.ui.edit.text.clojure.evaluate.toplevel.s.expression"
             contextId="ccw.ui.clojureEditorScope"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
@@ -590,19 +647,35 @@
       <key
             commandId="ccw.ui.edit.text.clojure.launch.repl"
             contextId="ccw.ui.clojureEditorScope"
+            platform="win32"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M2+M3+X C"/>
       <key
             commandId="ccw.ui.edit.text.clojure.launch.repl"
+            contextId="ccw.ui.clojureEditorScope"
+            platform="gtk"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M2+M3+X C">
       </key>
       <key
-            sequence="M1+M3+X C"
-            contextId="ccw.ui.clojureEditorScope"
             commandId="ccw.ui.edit.text.clojure.launch.repl"
+            contextId="ccw.ui.clojureEditorScope"
+            platform="carbon"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
-            platform="carbon"/>
+            sequence="M1+M3+X C">
+      </key>
+      <key
+            commandId="ccw.ui.edit.text.clojure.launch.repl"
+            platform="win32"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M2+M3+X C">
+      </key>
+      <key
+            commandId="ccw.ui.edit.text.clojure.launch.repl"
+            platform="gtk"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M2+M3+X C">
+      </key>
       <key
             commandId="ccw.ui.edit.text.clojure.launch.repl"
             platform="carbon"
@@ -627,16 +700,10 @@
             commandId="ccw.ui.edit.text.clojure.load.file"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"/>
       <key
-            sequence="M1+M3+N"
-            contextId="ccw.ui.clojureEditorScope"
             commandId="ccw.ui.edit.text.clojure.switchNamespace"
-            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"/>
-      <key
-            sequence="M3+M4+N"
             contextId="ccw.ui.clojureEditorScope"
-            commandId="ccw.ui.edit.text.clojure.switchNamespace"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
-            platform="carbon"/>
+            sequence="M1+M3+N"/>
       <key
             sequence="M1+M3+K"
             contextId="ccw.ui.clojureEditorScope"
@@ -656,10 +723,18 @@
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"/-->
             
       <key
-            sequence="M2+M3+X R"
-            contextId="ccw.ui.context.repl"
             commandId="ccw.ui.edit.text.clojure.reload"
-            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"/>
+            contextId="ccw.ui.context.repl"
+            platform="win32"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M2+M3+X R"/>
+      <key
+            commandId="ccw.ui.edit.text.clojure.reload"
+            contextId="ccw.ui.context.repl"
+            platform="gtk"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M2+M3+X R">
+      </key>
 
       <key
             sequence="M1+M3+X R"
@@ -682,8 +757,22 @@
       <key
             commandId="ccw.view.repl.commands.printErrorDetail"
             contextId="ccw.ui.context.repl"
+            platform="win32"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M3+E">
+      </key>
+      <key
+            commandId="ccw.view.repl.commands.printErrorDetail"
+            contextId="ccw.ui.context.repl"
+            platform="gtk"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M3+E">
+      </key>
+      <key
+            commandId="ccw.view.repl.commands.interrupt"
+            contextId="ccw.ui.context.repl"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+I">
       </key>
       <key
             commandId="ccw.view.repl.commands.printErrorDetail"
@@ -695,6 +784,14 @@
       <key
             commandId="ccw.view.repl.commands.clearLog"
             contextId="ccw.ui.context.repl"
+            platform="win32"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M3+K">
+      </key>
+      <key
+            commandId="ccw.view.repl.commands.clearLog"
+            contextId="ccw.ui.context.repl"
+            platform="gtk"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M3+K">
       </key>
@@ -714,6 +811,14 @@
       <key
             commandId="ccw.ui.repl.history.previous"
             contextId="ccw.ui.context.repl"
+            platform="win32"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+ARROW_UP">
+      </key>
+      <key
+            commandId="ccw.ui.repl.history.previous"
+            contextId="ccw.ui.context.repl"
+            platform="gtk"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M1+ARROW_UP">
       </key>
@@ -725,8 +830,23 @@
             sequence="M4+ARROW_UP">
       </key>
       <key
+            commandId="ccw.ui.repl.history.previous"
+            contextId="ccw.ui.context.repl"
+            platform="carbon"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M4+P">
+      </key>
+      <key
             commandId="ccw.ui.repl.history.next"
             contextId="ccw.ui.context.repl"
+            platform="win32"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+ARROW_DOWN">
+      </key>
+      <key
+            commandId="ccw.ui.repl.history.next"
+            contextId="ccw.ui.context.repl"
+            platform="gtk"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M1+ARROW_DOWN">
       </key>
@@ -736,6 +856,13 @@
             platform="carbon"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M4+ARROW_DOWN">
+      </key>
+      <key
+            commandId="ccw.ui.repl.history.next"
+            contextId="ccw.ui.context.repl"
+            platform="carbon"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M4+N">
       </key>
       <key
             commandId="ccw.ui.edit.text.clojure.comment.toggle"
@@ -791,6 +918,10 @@
                   name="ccw.menus.separator1"
                   visible="true">
             </separator>
+            <command
+                  commandId="ccw.ui.edit.text.clojure.switch.structuraledition.mode"
+                  style="push">
+            </command>
             <command
                   commandId="ccw.ui.edit.text.clojure.select.toplevel.s.expression"
                   label="Select top level s-expression"
@@ -1066,6 +1197,11 @@
                icon="icons/repl/print_last_error.gif"
                style="push">
          </command>
+        <command
+              commandId="ccw.view.repl.commands.interrupt"
+              icon="icons/repl/interrupt.gif"
+              style="push">
+        </command>
          <command
                commandId="ccw.view.repl.commands.reconnect"
                icon="icons/repl/reconnect.gif"
@@ -1078,6 +1214,12 @@
                icon="icons/repl/clear.gif"
                style="push"
                tooltip="Clear the REPL log">
+         </command>
+         <command
+               commandId="ccw.view.repl.commands.newSession"
+               icon="icons/repl/new_wiz.gif"
+               style="push"
+               tooltip="Open a new REPL session connected to this REPL's Clojure process.">
          </command>
          <command
                commandId="ccw.view.repl.commands.showConsole"
@@ -1088,50 +1230,76 @@
          </command>
       </menuContribution>
       <menuContribution
-            locationURI="menu:ccw.view.repl">
+            allPopups="true"
+            locationURI="popup:org.eclipse.ui.projectConfigure?after=additions">
          <command
-               commandId="ccw.view.repl.commands.printErrorDetail"
-               icon="icons/repl/print_last_error.gif"
+               commandId="ccw.core.command.toggle-clojure-nature"
+               label="%ccw.core.command.toggle-clojure-nature.add.name"
                style="push">
-         </command>
-         <command
-               commandId="ccw.view.repl.commands.reconnect"
-               icon="icons/repl/reconnect.gif"
-               style="push"
-               tooltip="Reconnect to this REPL&apos;s host and port (first disconnecting if necessary)">
-         </command>
-         <command
-               commandId="ccw.view.repl.commands.clearLog"
-               disabledIcon="icons/repl/clear_disabled.gif"
-               icon="icons/repl/clear.gif"
-               style="push"
-               tooltip="Clear the REPL log">
-         </command>
-         <command
-               commandId="ccw.view.repl.commands.showConsole"
-               disabledIcon="icons/repl/showActive_disabled.png"
-               icon="icons/repl/showActive.png"
-               style="push"
-               tooltip="Show the console for the JVM process to which this REPL is connected">
+            <visibleWhen
+                  checkEnabled="false">
+               <not>
+                  <and>
+                     <count
+                           value="1">
+                     </count>
+                     <iterate
+                           ifEmpty="false"
+                           operator="or">
+                        <adapt
+                              type="org.eclipse.core.resources.IProject">
+                           <test
+                                 property="org.eclipse.core.resources.projectNature"
+                                 value="ccw.nature">
+                           </test>
+                        </adapt>
+                     </iterate>
+                  </and>
+               </not>
+            </visibleWhen>
          </command>
       </menuContribution>
-   </extension>
-   <extension
-         point="org.eclipse.ui.popupMenus">
-      <objectContribution
-            adaptable="true"
-            id="ccw.objectContribution.clojure.nature"
-            objectClass="org.eclipse.core.resources.IContainer">
-         <action
-               class="ccw.actions.ToggleNatureAction"
-               enablesFor="+"
+      <menuContribution
+            allPopups="true"
+            locationURI="popup:org.eclipse.ui.popup.any?after=additions">
+         <menu
                icon="icons/clojure16x16.png"
-               id="ccw.action.toggleClojureNature"
-               label="Enable/disable clojure language support"
-               menubarPath="additions">
-         </action>
-      </objectContribution>
+               id="ccw.core.project.menu"
+               label="%ccw.core.clojure.popup.menu.label"
+               mnemonic="C">
+            <separator
+                  name="ccw.core.project.menu.separator1"
+                  visible="true">
+            </separator>
+            <command
+                  commandId="ccw.core.command.toggle-clojure-nature"
+                  label="%ccw.core.command.toggle-clojure-nature.remove.label"
+                  mnemonic="R"
+                  style="push">
+               <visibleWhen
+                     checkEnabled="false">
+                  <and>
+                     <count
+                           value="1">
+                     </count>
+                     <iterate
+                           ifEmpty="false"
+                           operator="or">
+                        <adapt
+                              type="org.eclipse.core.resources.IProject">
+                           <test
+                                 property="org.eclipse.core.resources.projectNature"
+                                 value="ccw.nature">
+                           </test>
+                        </adapt>
+                     </iterate>
+                  </and>
+               </visibleWhen>
+            </command>
+         </menu>
+      </menuContribution>
    </extension>
+   
 	<extension point="org.eclipse.debug.ui.launchConfigurationTypeImages">
     <launchConfigurationTypeImage
           configTypeID="ccw.launching.clojure"
@@ -1201,6 +1369,24 @@
              relative="org.eclipse.ui.views.ContentOutline">
        </view>
     </perspectiveExtension>
+    <perspectiveExtension
+          targetID="org.eclipse.debug.ui.DebugPerspective">
+       <newWizardShortcut
+             id="ccw.project.new.wizard">
+       </newWizardShortcut>
+       <newWizardShortcut
+             id="ccw.newClojureFileWizard">
+       </newWizardShortcut>
+       <viewShortcut
+             id="ccw.view.namespacebrowser">
+       </viewShortcut>
+       <view
+             id="ccw.view.namespacebrowser"
+             minimized="false"
+             relationship="stack"
+             relative="org.eclipse.ui.views.ContentOutline">
+       </view>
+    </perspectiveExtension>
  </extension>
  <extension
        id="ccw.markers.problemmarkers.compilation"
@@ -1216,17 +1402,24 @@
  <extension
        point="org.eclipse.core.expressions.propertyTesters">
     <propertyTester
-          class="ccw.ClojureNaturePropertyTest"
+          class="ccw.nature.ClojureNaturePropertyTest"
           id="ccw.propertyTester.hasClojureNature"
           namespace="ccw.propertyTester"
           properties="hasClojureNature"
-          type="org.eclipse.core.resources.IProject">
+          type="java.lang.Object">
     </propertyTester>
  </extension>
  <extension
        point="org.eclipse.core.runtime.adapters">
     <factory
           adaptableType="org.eclipse.core.resources.IProject"
+          class="ccw.ProjectLaunchableAdapter">
+       <adapter
+             type="org.eclipse.debug.ui.actions.ILaunchable">
+       </adapter>
+    </factory>
+    <factory
+          adaptableType="org.eclipse.core.resources.IFile"
           class="ccw.ProjectLaunchableAdapter">
        <adapter
              type="org.eclipse.debug.ui.actions.ILaunchable">
@@ -1239,6 +1432,12 @@
           name="%preferencePage.clojure.name"
           class="ccw.preferences.EmptyPreferencePage"
           id="ccw.preferences.EmptyPreferencePage">
+    </page>
+    <page
+          name="%preferencePage.general.name"
+          category="ccw.preferences.EmptyPreferencePage"
+          class="ccw.preferences.GeneralPreferencePage"
+          id="ccw.preferences.GeneralPreferencePage">
     </page>
     <page
           name="%preferencePage.editor.name"
@@ -1288,7 +1487,27 @@
           </iterate>
        </with>
     </definition>
+    <definition
+          id="ccw.core.project.with.clojure.nature">
+       <and>
+          <count
+                value="1">
+          </count>
+          <iterate
+                ifEmpty="false"
+                operator="or">
+             <adapt
+                   type="org.eclipse.core.resources.IProject">
+                <test
+                      property="org.eclipse.core.resources.projectNature"
+                      value="ccw.nature">
+                </test>
+             </adapt>
+          </iterate>
+       </and>
+    </definition>
  </extension>
+ 
  <extension
        point="org.eclipse.ui.workbench.texteditor.hyperlinkDetectors">
     <hyperlinkDetector
@@ -1346,6 +1565,7 @@
        </context>
     </target>
     
+    
 </extension>
   <extension
         point="org.eclipse.ui.handlers">
@@ -1364,6 +1584,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            class="ccw.repl.Actions$PrintErrorHandler"
@@ -1380,10 +1612,67 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.context.repl">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
+        
      </handler>
      <handler
            class="ccw.repl.Actions$ReconnectHandler"
            commandId="ccw.view.repl.commands.reconnect">
+        <enabledWhen>
+           <with variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.context.repl">
+                 </equals>
+              </iterate>
+           </with>
+        </enabledWhen>
+        <activeWhen>
+           <with variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.context.repl">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
+     </handler>
+     <handler
+           class="ccw.repl.Actions$InterruptHandler"
+           commandId="ccw.view.repl.commands.interrupt">
+        <enabledWhen>
+           <with variable="activeContexts">
+              <iterate ifEmpty="false" operator="or">
+                 <equals value="ccw.ui.context.repl"/>
+              </iterate>
+           </with>
+        </enabledWhen>
+        <activeWhen>
+           <with variable="activeContexts">
+              <iterate ifEmpty="false" operator="or">
+                 <equals value="ccw.ui.context.repl"/>
+              </iterate>
+           </with>
+        </activeWhen>
+     </handler>
+     <handler
+           class="ccw.repl.Actions$ClearLogHandler"
+           commandId="ccw.view.repl.commands.clearLog">
         <enabledWhen>
            <with
                  variable="activeContexts">
@@ -1396,10 +1685,22 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.context.repl">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
-           class="ccw.repl.Actions$ClearLogHandler"
-           commandId="ccw.view.repl.commands.clearLog">
+           class="ccw.repl.Actions$NewSessionHandler"
+           commandId="ccw.view.repl.commands.newSession">
         <enabledWhen>
            <with
                  variable="activeContexts">
@@ -1428,6 +1729,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.context.repl">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.select.raise">
@@ -1435,7 +1748,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1454,6 +1767,57 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
+     </handler>
+
+     <handler
+           commandId="ccw.ui.edit.text.clojure.splice.sexpr">
+        <class
+              class="ccw.util.GenericExecutableExtension">
+           <parameter
+                 name="factory"
+                 value="ccw.util.factories/handler-factory">
+           </parameter>
+           <parameter
+                 name="handler"
+                 value="ccw.editors.clojure.handlers/splice">
+           </parameter>
+        </class>
+        <enabledWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.split.sexpr">
@@ -1461,7 +1825,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1480,6 +1844,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.join.sexpr">
@@ -1487,7 +1863,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1506,6 +1882,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.expand.selection.right">
@@ -1513,7 +1901,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1532,6 +1920,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.expand.selection.left">
@@ -1539,7 +1939,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1558,6 +1958,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.expand.selection.up">
@@ -1565,7 +1977,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1584,6 +1996,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.select.last">
@@ -1591,7 +2015,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1610,6 +2034,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.open.declaration">
@@ -1617,7 +2053,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1636,6 +2072,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.indent.selection">
@@ -1643,7 +2091,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1662,14 +2110,27 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
+     
      <handler
            commandId="org.eclipse.ui.edit.text.contentAssist.proposals">
         <class
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1688,14 +2149,27 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
+ 
      <handler
            commandId="ccw.ui.edit.text.clojure.switch.structuraledition.mode">
         <class
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1714,6 +2188,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.repl.history.previous">
@@ -1721,7 +2207,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1740,6 +2226,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.context.repl">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.repl.history.next">
@@ -1747,7 +2245,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1766,6 +2264,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.context.repl">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.comment.toggle">
@@ -1773,7 +2283,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1792,6 +2302,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="ccw.ui.edit.text.clojure.pastewithescaping">
@@ -1799,7 +2321,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1818,6 +2340,18 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
      </handler>
      <handler
            commandId="org.eclipse.ui.edit.paste">
@@ -1825,7 +2359,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1863,7 +2397,7 @@
               class="ccw.util.GenericExecutableExtension">
            <parameter
                  name="factory"
-                 value="ccw.util.handler-factory/factory">
+                 value="ccw.util.factories/handler-factory">
            </parameter>
            <parameter
                  name="handler"
@@ -1882,20 +2416,34 @@
               </iterate>
            </with>
         </enabledWhen>
+        <activeWhen>
+           <with
+                 variable="activeContexts">
+              <iterate
+                    ifEmpty="false"
+                    operator="or">
+                 <equals
+                       value="ccw.ui.clojureEditorScope">
+                 </equals>
+              </iterate>
+           </with>
+        </activeWhen>
+     </handler>
+     <handler
+           class="ccw.commands.ToggleNatureCommand"
+           commandId="ccw.core.command.toggle-clojure-nature">
      </handler>
   </extension>
+  
   <extension
         point="org.eclipse.core.contenttype.contentTypes">
      <content-type
+           base-type="org.eclipse.core.runtime.text"
            default-charset="UTF-8"
-           file-extensions="clj"
+           file-extensions="clj,cljs,dtm,edn"
            id="ccw.core.clj"
-           name="Clojure files"
+           name="Clojure/ ClojureScript / Datomic / EDN Source File"
            priority="high">
      </content-type>
-     <file-association
-           content-type="ccw.core.clj"
-           file-extensions="clj">
-     </file-association>
   </extension>
 </plugin>

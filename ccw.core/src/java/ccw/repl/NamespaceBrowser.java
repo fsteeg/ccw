@@ -1,14 +1,10 @@
 package ccw.repl;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import org.eclipse.core.resources.IFile;
-import org.eclipse.core.resources.IProject;
-import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.ListenerList;
@@ -46,20 +42,21 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.IViewPart;
 import org.eclipse.ui.IViewSite;
+import org.eclipse.ui.IWorkbenchPage;
+import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.part.ViewPart;
 
 import ccw.CCWPlugin;
 import ccw.ClojureCore;
-import ccw.editors.clojure.EvaluateTextUtil;
-import ccw.launching.LaunchUtils;
-import ccw.preferences.PreferenceConstants;
+import ccw.TraceOptions;
 import ccw.util.ClojureDocUtils;
+import ccw.util.ClojureInvoker;
 import ccw.util.DisplayUtil;
+import clojure.lang.Keyword;
 import clojure.tools.nrepl.Connection;
 import clojure.tools.nrepl.Connection.Response;
-import clojure.lang.Keyword;
 
 public class NamespaceBrowser extends ViewPart implements ISelectionProvider, ISelectionChangedListener {
 	/**
@@ -93,6 +90,13 @@ public class NamespaceBrowser extends ViewPart implements ISelectionProvider, IS
 	private ISelection selectionBeforePatternSearchBegan;
 	private Object[] expandedElementsBeforeSearchBegan;
 
+	private static final ClojureInvoker docUtils = 
+			ClojureInvoker.newInvoker(
+					CCWPlugin.getDefault(), 
+					"ccw.util.doc-utils");
+	
+	private static final String VAR_DOC_INFO = "var-doc-info-text";
+	
 	/**
 	 * Creates a content outline view with no content outline pages.
 	 */
@@ -281,7 +285,7 @@ public class NamespaceBrowser extends ViewPart implements ISelectionProvider, IS
 	private static class LabelProvider extends CellLabelProvider {
 
 		public String getToolTipText(Object element) {
-			return ClojureDocUtils.getVarDocInfo(element);
+			return (String) docUtils._(VAR_DOC_INFO, element);
 		}
 
 		public Point getToolTipShift(Object object) {
@@ -330,8 +334,13 @@ public class NamespaceBrowser extends ViewPart implements ISelectionProvider, IS
 	@SuppressWarnings("unchecked")
     private Map<String, List<String>> getRemoteNsTree (Connection repl) {
 		try {
-		    Response res = repl.send("(ccw.debug.serverrepl/namespaces-info)");
-            return (Map<String, List<String>>)res.values().get(0);
+		    Response res = repl.send("op", "eval", "code", "(ccw.debug.serverrepl/namespaces-info)");
+            List<Object> values = res.values();
+            if (values.isEmpty()) {
+            	return null;
+            } else {
+            	return (Map<String, List<String>>)values.get(0);
+            }
         } catch (Exception e) {
             System.out.println(e);
             return null;
@@ -489,7 +498,16 @@ public class NamespaceBrowser extends ViewPart implements ISelectionProvider, IS
 	}
 	
 	private static void inUIThreadSetREPLConnection (Connection repl) {
-		IViewPart[] views = PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage().getViews(); // TODO fix potential NPE here			
+		IWorkbenchWindow activeWorkbenchWindow = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+		if (activeWorkbenchWindow == null ) {
+			CCWPlugin.getTracer().trace(TraceOptions.REPL, "activeWorkbenchWindow is null");
+			return;
+		}
+		IWorkbenchPage activePage = activeWorkbenchWindow.getActivePage();
+		if (activePage == null) {
+			CCWPlugin.getTracer().trace(TraceOptions.REPL, "activePage is null");
+		}
+		IViewPart[] views = activePage.getViews();			
 		NamespaceBrowser co = null;
 		for (IViewPart v: views) {
 			if (NamespaceBrowser.class.isInstance(v)) {

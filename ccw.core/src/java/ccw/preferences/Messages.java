@@ -15,9 +15,14 @@ import org.eclipse.osgi.util.NLS;
 public class Messages extends NLS {
     private static final String BUNDLE_NAME = "ccw.preferences.messages"; //$NON-NLS-1$
 
+
+
+
     public static String ClojurePreferencePage_Description;
 
     public static String ClojurePreferencePage_description;
+    
+    public static String ClojureEditorPreferencePage_Description;
 
     public static String ClojurePreferencePage_displayed_tab_width;
 
@@ -32,6 +37,10 @@ public class Messages extends NLS {
     public static String ClojurePreferencePage_use_tab_for_reindenting_line;
 
     public static String ClojurePreferencePage_escape_on_paste;
+
+    public static String ClojurePreferencePage_code_completion_auto_activate;
+    
+    public static String ClojurePreferencePage_show_more_context_in_tabs;
 
     public static String SyntaxColoringPreferencePage_function;
 
@@ -70,6 +79,8 @@ public class Messages extends NLS {
 
     public static String SyntaxColoringPreferencePage_metadataTypehint;
     
+    public static String SyntaxColoringPreferencePage_readerLiteralTag;
+    
     public static String SyntaxColoringPreferencePage_macro;
     
     public static String SyntaxColoringPreferencePage_callableMacro;
@@ -90,6 +101,8 @@ public class Messages extends NLS {
     
     public static String SyntaxColoringPreferencePage_char;
     
+    public static String SyntaxColoringPreferencePage_otherLiterals;    
+
     public static String SyntaxColoringPreferencePage_javaClass;
     
     public static String SyntaxColoringPreferencePage_javaInstanceMethod;
@@ -113,13 +126,21 @@ public class Messages extends NLS {
 	public static String SyntaxColoringPreferencePage_rainbowParenLevel7;
 	public static String SyntaxColoringPreferencePage_rainbowParenLevel8;
 
-    
-    
-    public static String SyntaxColoringPreferencePage_preview;
+	public static String SyntaxColoringPreferencePage_replLogValue;
+	public static String SyntaxColoringPreferencePage_replLogError;
 
+	public static String SyntaxColoringPreferencePage_preview;
+
+	public static String ClojureREPLPreferencePage_Description;
+	
     public static String REPLViewPreferencePage_activate_autoEval_on_Enter;
 
     public static String REPLViewPreferencePage_displayHint;
+
+    public static String REPLViewPreferencePage_quietLoggingMode;
+    
+    public static String ClojureGeneralPreferencePage_Description;
+    public static String ClojureGeneralPreferencePage_automatic_nature_addition;
 
     static {
         // initialize resource bundle
