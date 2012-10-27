@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 
 import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IProject;
@@ -30,11 +31,13 @@ import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.ProgressMonitorWrapper;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.debug.core.DebugException;
 import org.eclipse.debug.core.ILaunch;
 import org.eclipse.debug.core.ILaunchConfiguration;
 import org.eclipse.jdt.launching.IJavaLaunchConfigurationConstants;
 import org.eclipse.jdt.launching.JavaLaunchDelegate;
 import org.eclipse.jface.dialogs.ErrorDialog;
+import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.WorkbenchException;
 import org.eclipse.ui.console.ConsolePlugin;
@@ -49,7 +52,7 @@ import ccw.util.BundleUtils;
 import ccw.util.DisplayUtil;
 import clojure.lang.RT;
 import clojure.lang.Var;
-import clojure.tools.nrepl.SafeFn;
+import clojure.tools.nrepl.Connection;
 
 public class ClojureLaunchDelegate extends JavaLaunchDelegate {
 
@@ -75,43 +78,68 @@ public class ClojureLaunchDelegate extends JavaLaunchDelegate {
 
         public void done() {
             super.done();
-            Job ackJob = new Job("Waiting for new REPL process ack") {
-				@Override
+
+            Job ackJob = new Job("Waiting for new REPL process to be ready...") {
+                private IProgressMonitor monitor;
+                private CountDownLatch cancelOrAck = new CountDownLatch(1);
+                public void canceling () {
+                    if (monitor != null) {
+                        monitor.setCanceled(true);
+                        cancelOrAck.countDown();
+                        try {
+                            launch.terminate();
+                        } catch (DebugException e) {
+                            CCWPlugin.logError(e);
+                        }
+                    }
+                }
+                
+                private IStatus done (IProgressMonitor monitor, IStatus status) {
+                    monitor.done();
+                    return status;
+                }
+                
 				protected IStatus run(final IProgressMonitor monitor) {
-					final int STEPS_BEFORE_GIVING_UP = 600;
-					final int MILLIS_BETWEEN_STEPS = 50;
-					monitor.beginTask("Waiting for new REPL process ack", STEPS_BEFORE_GIVING_UP);
-					Long maybePort = null;
-					for (int i = 0; i < STEPS_BEFORE_GIVING_UP; i++) {
-						maybePort = (Long)SafeFn.find("clojure.tools.nrepl", "wait-for-ack").sInvoke(MILLIS_BETWEEN_STEPS);
-						monitor.worked(1);
-						if (maybePort != null) {
-							break;
-						}
-					}
-					
-		            if (maybePort == null) {
-		                CCWPlugin.logError("Waiting for new REPL process ack timed out");
-		                return new Status(IStatus.ERROR, CCWPlugin.PLUGIN_ID, "Waiting for new REPL process ack timed out");
-		            }
-		            final Long port = maybePort;
-		            DisplayUtil.asyncExec(new Runnable() {
+				    this.monitor = monitor;
+				    
+					monitor.beginTask("Waiting for new REPL process to be ready...", IProgressMonitor.UNKNOWN);
+
+                    final Number port = (Number)Connection.find("clojure.tools.nrepl.ack", "wait-for-ack").invoke(30000);
+                    cancelOrAck.countDown();
+
+                    if (monitor.isCanceled()) {
+                        return done(monitor, Status.CANCEL_STATUS);
+                    } else if (port == null) {
+                        CCWPlugin.logError("Waiting for new REPL process ack timed out");
+                        return done(monitor, new Status(IStatus.ERROR, CCWPlugin.PLUGIN_ID, "Waiting for new REPL process ack timed out"));
+                    }
+                    
+                    // The syncExec is necessary to ensure the launch does not return
+                    // until either the repl is launched, either it failed
+		            DisplayUtil.syncExec(new Runnable() {
 		                public void run() {
+		                    
+		                    // only using a latch because getProject().touch can call done() more than once
+		                    final CountDownLatch projectTouchLatch = new CountDownLatch(1);
 	                    	if (isAutoReloadEnabled(launch) && getProject() != null) {
                     			try {
 	                    			getProject().touch(new NullProgressMonitor() {
 	                    				public void done() {
-	                    					connectRepl();
+	                    					projectTouchLatch.countDown();
 	                    				}
 	                    			});
                     			} catch (CoreException e) {
                     				final String MSG = "unexpected exception during project refresh for auto-load on startup";
                     				ErrorDialog.openError(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(),
-                    						"REPL Connexion failure", MSG, e.getStatus());
+                    						"REPL Connection failure", MSG, e.getStatus());
 	                    		}
 	                    	} else {
-	                    		connectRepl();
+	                    		projectTouchLatch.countDown();
 	                    	}
+	                    	try {
+                                projectTouchLatch.await();
+                            } catch (InterruptedException e) {}
+	                    	connectRepl();
 		                }
 		                private IProject getProject() {
 		            		try {
@@ -123,7 +151,7 @@ public class ClojureLaunchDelegate extends JavaLaunchDelegate {
 		            	}
 		                private void connectRepl() {
 		                    try {
-		                        REPLView replView = REPLView.connect("localhost", port.intValue(), lastConsoleOpened, launch);
+		                        REPLView replView = REPLView.connect("nrepl://localhost:" + port.intValue(), lastConsoleOpened, launch);
 		                        String startingNamespace = REPLViewLaunchMonitor.this.launch.getLaunchConfiguration().getAttribute(LaunchUtils.ATTR_NS_TO_START_IN, "user");
 		                        try {
 		                        	replView.setCurrentNamespace(startingNamespace);
@@ -136,21 +164,29 @@ public class ClojureLaunchDelegate extends JavaLaunchDelegate {
 		                    }
 		                }
 		            });
-		            monitor.done();
-		            return Status.OK_STATUS;
+		            
+		            return done(monitor, Status.OK_STATUS);
 				}
             };
             ackJob.setUser(true);
             ackJob.schedule();
+            
+            Thread.yield();
+            
+            try {
+				ackJob.join();
+			} catch (InterruptedException e) {
+				CCWPlugin.logError("Exception while launching a Clojure Application", e);
+			}
         }
     }
     
     
     @Override
     public void launch(ILaunchConfiguration configuration, String mode, ILaunch launch, IProgressMonitor monitor) throws CoreException {
-        launch.setAttribute(LaunchUtils.ATTR_PROJECT_NAME, configuration.getAttribute(LaunchUtils.ATTR_PROJECT_NAME, (String) null));
+    	LaunchUtils.setProjectName(launch, configuration.getAttribute(LaunchUtils.ATTR_PROJECT_NAME, (String) null));
         launch.setAttribute(LaunchUtils.ATTR_IS_AUTO_RELOAD_ENABLED, Boolean.toString(configuration.getAttribute(LaunchUtils.ATTR_IS_AUTO_RELOAD_ENABLED, false)));
-        BundleUtils.requireAndGetVar(CCWPlugin.getDefault().getBundle().getSymbolicName(), "clojure.tools.nrepl/reset-ack-port!").invoke();
+        BundleUtils.requireAndGetVar(CCWPlugin.getDefault().getBundle().getSymbolicName(), "clojure.tools.nrepl.ack/reset-ack-port!").invoke();
         try {
             Var.pushThreadBindings(RT.map(currentLaunch, launch));
             super.launch(configuration, mode, launch, (monitor == null || !isLaunchREPL(configuration)) ?
@@ -185,12 +221,15 @@ public class ClojureLaunchDelegate extends JavaLaunchDelegate {
 				throw new WorkbenchException("Could not find ccw.debug.serverrepl source file", e);
 			}
 			
-			String nREPLInit = "(require 'clojure.tools.nrepl)" + 
+			String nREPLInit = "(require 'clojure.tools.nrepl.server)" + 
 			    // don't want start-server return value printed
-			    String.format("(do (clojure.tools.nrepl/start-server 0 %s) nil)", CCWPlugin.getDefault().getREPLServerPort());
+			    String.format("(do (clojure.tools.nrepl.server/start-server :ack-port %s) nil)", CCWPlugin.getDefault().getREPLServerPort());
 			
-			return String.format("-i \"%s\" -e \"%s\" %s %s", toolingFile, nREPLInit,
+			String args = String.format("-i \"%s\" -e \"%s\" %s %s", toolingFile, nREPLInit,
 			        filesToLaunchArguments, userProgramArguments);
+			
+			CCWPlugin.log("Starting REPL with program args: " + args);
+			return args;
 		} else {
 			String filesToLaunchArguments = LaunchUtils.getFilesToLaunchAsCommandLineList(configuration, true);
 			
@@ -235,7 +274,19 @@ public class ClojureLaunchDelegate extends JavaLaunchDelegate {
         if (clojureProject.getJavaProject().findElement(new Path("clojure/tools/nrepl")) == null) {
             try {
                 File repllib = FileLocator.getBundleFile(Platform.getBundle("org.clojure.tools.nrepl"));
-                classpath.add(repllib.getAbsolutePath());
+                // this should *always* be a file, *unless* the user is getting nREPL from a clone of its
+                // project, in which case we need to reach into that project's directory...
+                ArrayList replAdditions = new ArrayList();
+                if (repllib.isFile()) {
+                    replAdditions.add(repllib.getAbsolutePath());
+                } else {
+                    replAdditions.add(new File(repllib, "src/main/clojure").getAbsolutePath());
+                    replAdditions.add(new File(repllib, "target/classes").getAbsolutePath());
+                }
+                
+                CCWPlugin.log("Adding to project's classpath to support nREPL: " + replAdditions);
+                
+                classpath.addAll(replAdditions);
             } catch (IOException e) {
                 throw new WorkbenchException("Failed to find nrepl library", e);
             }

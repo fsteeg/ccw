@@ -245,11 +245,13 @@ public class SyntaxColoringPreferencePage extends PreferencePage implements IWor
         { Messages.SyntaxColoringPreferencePage_comment, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.commentToken)},
         { Messages.SyntaxColoringPreferencePage_string, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.stringToken)},
         { Messages.SyntaxColoringPreferencePage_metadataTypehint, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.metaToken)},
+        { Messages.SyntaxColoringPreferencePage_readerLiteralTag, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.readerLiteralTag)},
         { Messages.SyntaxColoringPreferencePage_keyword, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.keywordToken)},
         { Messages.SyntaxColoringPreferencePage_regex, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.regexToken)},
         { Messages.SyntaxColoringPreferencePage_int, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.intToken)},
         { Messages.SyntaxColoringPreferencePage_float, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.floatToken)},
         { Messages.SyntaxColoringPreferencePage_char, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.charToken)},
+        { Messages.SyntaxColoringPreferencePage_otherLiterals, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.otherLiteralsToken)},
         
                 
         { Messages.SyntaxColoringPreferencePage_deactivateRainbowParen, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.deactivatedRainbowParen)},
@@ -261,7 +263,10 @@ public class SyntaxColoringPreferencePage extends PreferencePage implements IWor
         { Messages.SyntaxColoringPreferencePage_rainbowParenLevel6, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.rainbowParenLevel6)},
         { Messages.SyntaxColoringPreferencePage_rainbowParenLevel7, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.rainbowParenLevel7)},
         { Messages.SyntaxColoringPreferencePage_rainbowParenLevel8, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.rainbowParenLevel8)},
-    };
+
+        { Messages.SyntaxColoringPreferencePage_replLogValue, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.replLogValue)},
+        { Messages.SyntaxColoringPreferencePage_replLogError, PreferenceConstants.getTokenPreferenceKey(PreferenceConstants.replLogError)},
+};
     
     OverlayPreferenceStore fOverlayStore;
     

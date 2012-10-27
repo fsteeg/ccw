@@ -30,10 +30,10 @@ public class Actions {
         }
     }
     
-    public static class ConnecToEclipseNREPL extends AbstractHandler {
+    public static class ConnectToEclipseNREPL extends AbstractHandler {
 		public Object execute(ExecutionEvent event) throws ExecutionException {
             try {
-                return REPLView.connect("127.0.0.1", CCWPlugin.getDefault().getREPLServerPort());
+                return REPLView.connect("nrepl://localhost:" + CCWPlugin.getDefault().getREPLServerPort());
             } catch (Exception e) {
                 throw new ExecutionException("Could not connect to Eclipse's internal nrepl server", e);
             }
@@ -110,10 +110,31 @@ public class Actions {
         }
     }
     
+    public static class NewSessionHandler extends AbstractREPLViewHandler {
+        public void doExecute(ExecutionEvent event, REPLView repl) throws ExecutionException {
+            try {
+                REPLView.connect(repl.getConnection().url);
+            } catch (Exception e) {
+                final String msg = "Unexpected exception occured while trying to connect REPL view to clojure server"; 
+                ErrorDialog.openError(
+                        HandlerUtil.getActiveShell(event),
+                        "Connection Error",
+                        msg,
+                        CCWPlugin.createErrorStatus(msg, e));
+            }
+        }
+    }
+    
     public static class PrintErrorHandler extends AbstractREPLViewHandler {
 		public void doExecute(ExecutionEvent event, REPLView repl) throws ExecutionException {
 			repl.printErrorDetail();
 		}
+    }
+    
+    public static class InterruptHandler extends AbstractREPLViewHandler {
+        public void doExecute(ExecutionEvent event, REPLView repl) throws ExecutionException {
+            repl.sendInterrupt();
+        }
     }
     
     private static abstract class AbstractREPLViewHandler extends AbstractHandler {
