@@ -29,31 +29,32 @@ import clojure.lang.Keyword;
  */
 public class PreferenceConstants {
 	
-	public static Keyword stringToken = Keyword.intern("string");
-	public static Keyword regexToken = Keyword.intern("regex");
-	public static Keyword intToken = Keyword.intern("int");
-	public static Keyword floatToken = Keyword.intern("float");
-	public static Keyword charToken = Keyword.intern("char");
-//	public static Keyword literalSymbolToken = Keyword.intern("literalSymbol");
+	public static final Keyword stringToken = Keyword.intern("string");
+	public static final Keyword otherLiteralsToken = Keyword.intern("other-literals");
+	public static final Keyword regexToken = Keyword.intern("regex");
+	public static final Keyword intToken = Keyword.intern("int");
+	public static final Keyword floatToken = Keyword.intern("float");
+	public static final Keyword charToken = Keyword.intern("char");
+//	public static final Keyword literalSymbolToken = Keyword.intern("literalSymbol");
 
-//	public static Keyword symbolToken = Keyword.intern("symbol");
+//	public static final Keyword symbolToken = Keyword.intern("symbol");
 
-	public static Keyword FUNCTION_Token = Keyword.intern("FUNCTION");
-	public static Keyword callableFUNCTION_Token = Keyword.intern("callableFUNCTION");
-	public static Keyword MACRO_Token = Keyword.intern("MACRO");
-	public static Keyword callableMACRO_Token = Keyword.intern("callableMACRO");
-	public static Keyword SPECIAL_FORM_Token = Keyword.intern("SPECIAL_FORM");
-	public static Keyword callableSPECIAL_FORM_Token = Keyword.intern("callableSPECIAL_FORM");
-	public static Keyword GLOBAL_VAR_Token = Keyword.intern("GLOBAL_VAR");
-	public static Keyword callableGLOBAL_VAR_Token = Keyword.intern("callableGLOBAL_VAR");
-	public static Keyword JAVA_CLASS_Token = Keyword.intern("JAVA_CLASS");
-	public static Keyword callableJAVA_CLASS_Token = Keyword.intern("callableJAVA_CLASS");
-	public static Keyword JAVA_INSTANCE_METHOD_Token = Keyword.intern("JAVA_INSTANCE_METHOD");
-	public static Keyword callableJAVA_INSTANCE_METHOD_Token = Keyword.intern("callableJAVA_INSTANCE_METHOD");
-	public static Keyword JAVA_STATIC_METHOD_Token = Keyword.intern("JAVA_STATIC_METHOD");
-	public static Keyword callableJAVA_STATIC_METHOD_Token = Keyword.intern("callableJAVA_STATIC_METHOD");
-	public static Keyword RAW_SYMBOL_Token = Keyword.intern("RAW_SYMBOL");
-	public static Keyword callable_RAW_SYMBOL_Token = Keyword.intern("callableRAW_SYMBOL");
+	public static final Keyword FUNCTION_Token = Keyword.intern("FUNCTION");
+	public static final Keyword callableFUNCTION_Token = Keyword.intern("callableFUNCTION");
+	public static final Keyword MACRO_Token = Keyword.intern("MACRO");
+	public static final Keyword callableMACRO_Token = Keyword.intern("callableMACRO");
+	public static final Keyword SPECIAL_FORM_Token = Keyword.intern("SPECIAL_FORM");
+	public static final Keyword callableSPECIAL_FORM_Token = Keyword.intern("callableSPECIAL_FORM");
+	public static final Keyword GLOBAL_VAR_Token = Keyword.intern("GLOBAL_VAR");
+	public static final Keyword callableGLOBAL_VAR_Token = Keyword.intern("callableGLOBAL_VAR");
+	public static final Keyword JAVA_CLASS_Token = Keyword.intern("JAVA_CLASS");
+	public static final Keyword callableJAVA_CLASS_Token = Keyword.intern("callableJAVA_CLASS");
+	public static final Keyword JAVA_INSTANCE_METHOD_Token = Keyword.intern("JAVA_INSTANCE_METHOD");
+	public static final Keyword callableJAVA_INSTANCE_METHOD_Token = Keyword.intern("callableJAVA_INSTANCE_METHOD");
+	public static final Keyword JAVA_STATIC_METHOD_Token = Keyword.intern("JAVA_STATIC_METHOD");
+	public static final Keyword callableJAVA_STATIC_METHOD_Token = Keyword.intern("callableJAVA_STATIC_METHOD");
+	public static final Keyword RAW_SYMBOL_Token = Keyword.intern("RAW_SYMBOL");
+	public static final Keyword callable_RAW_SYMBOL_Token = Keyword.intern("callableRAW_SYMBOL");
 	
 	public static final Keyword deactivatedRainbowParen = Keyword.intern("deactivated-rainbow-paren");
 	public static final Keyword rainbowParenLevel1 = Keyword.intern("rainbow-paren-level-1");
@@ -65,10 +66,14 @@ public class PreferenceConstants {
 	public static final Keyword rainbowParenLevel7 = Keyword.intern("rainbow-paren-level-7");
 	public static final Keyword rainbowParenLevel8 = Keyword.intern("rainbow-paren-level-8");
 
-	public static Keyword keywordToken = Keyword.intern("keyword");
-	public static Keyword commentToken = Keyword.intern("comment");
-	public static Keyword whitespaceToken = Keyword.intern("whitespace");
-	public static Keyword metaToken = Keyword.intern("meta");
+	public static final Keyword keywordToken = Keyword.intern("keyword");
+	public static final Keyword commentToken = Keyword.intern("comment");
+	public static final Keyword whitespaceToken = Keyword.intern("whitespace");
+	public static final Keyword metaToken = Keyword.intern("meta");
+	public static final Keyword readerLiteralTag = Keyword.intern("reader-literal");
+	
+	public static final Keyword replLogValue = Keyword.intern("repl-log-keyword-value");
+	public static final Keyword replLogError = Keyword.intern("repl-log-error");
 	
 	/** 
 	 * Set of tokens keywords for which syntax color information can be retrieved
@@ -84,6 +89,7 @@ public class PreferenceConstants {
 				new ArrayList<Keyword>() {
 			{
 				add(stringToken);
+				add(otherLiteralsToken);
 				add(regexToken);
 				add(intToken);
 				add(floatToken);
@@ -107,6 +113,7 @@ public class PreferenceConstants {
 				add(keywordToken);
 				add(commentToken);
 				add(metaToken);
+				add(readerLiteralTag);
 				add(deactivatedRainbowParen);
 				add(rainbowParenLevel1);
 				add(rainbowParenLevel2);
@@ -116,6 +123,8 @@ public class PreferenceConstants {
 				add(rainbowParenLevel6);
 				add(rainbowParenLevel7);
 				add(rainbowParenLevel8);
+				add(replLogValue);
+				add(replLogError);
 			}
 		});
 		
@@ -125,6 +134,8 @@ public class PreferenceConstants {
 	
 	
     public static final String CCW_PREFERENCE_PREFIX = "ccw.preferences"; //$NON-NLS-1$
+    
+    public static final String CCW_GENERAL_AUTOMATIC_NATURE_ADDITION = CCW_PREFERENCE_PREFIX + ".automatic_nature_addition";
     
 	public static final String SWITCH_TO_NS_ON_REPL_STARTUP = CCW_PREFERENCE_PREFIX + ".switch_to_ns_on_repl_startup"; //$NON-NLS-1$
 
@@ -136,10 +147,24 @@ public class PreferenceConstants {
 	public static final String EDITOR_COLORING_PREFIX = "editor_color"; //$NON-NLS-1$
 	
     public static final String EDITOR_ESCAPE_ON_PASTE = CCW_PREFERENCE_PREFIX + ".escape_on_paste"; //$NON-NLS-1$
+    
+	public static final String EDITOR_CODE_COMPLETION_AUTO_ACTIVATE = CCW_PREFERENCE_PREFIX + ".code_completion.auto_activate";
+	
+	public static final String EDITOR_DISPLAY_NAMESPACE_IN_TABS = CCW_PREFERENCE_PREFIX + ".editor.display_namespace_in_tabs";
+
 
     public static final String REPL_VIEW_AUTO_EVAL_ON_ENTER_ACTIVE = CCW_PREFERENCE_PREFIX + ".repl_view_autoeval_on_enter_active"; //$NON-NLS-1$
     public static final String REPL_VIEW_DISPLAY_HINTS = CCW_PREFERENCE_PREFIX + ".repl_view_display_hints"; //$NON-NLS-1$
     
+    /** 
+     * When "quiet logging mode" is on, interactions with a REPL such as user
+     * initiated commands (e.g. load file in REPL, switch namespace, etc.)
+     * Should report as little as possible to the log, whereas if the mode
+     * is off, every interaction with a REPL from a command, etc., should be
+     * very explicit about what happen (what the side effect or issued command
+     * is, and returned). */ 
+    public static final String REPL_QUIET_LOGGING_MODE = CCW_PREFERENCE_PREFIX + ".repl_quiet_logging_mode"; //$NON-NLS-1$
+
     public static final String EDITOR_BOLD_SUFFIX = ".bold"; //$NON-NLS-1$
     public static final String EDITOR_ITALIC_SUFFIX = ".italic"; //$NON-NLS-1$
     /* TODO enable these once text attributes are used in the editor
@@ -173,6 +198,13 @@ public class PreferenceConstants {
     			store.getBoolean(SyntaxColoringPreferencePage.getEnabledPreferenceKey(tokenKey))
     				? store.getBoolean(SyntaxColoringPreferencePage.getItalicPreferenceKey(tokenKey)) 
     				: null);
+    }
+    
+    public static boolean isReplQuietLoggingMode() {
+    	return CCWPlugin.getDefault().getCombinedPreferenceStore().getBoolean(PreferenceConstants.REPL_QUIET_LOGGING_MODE);
+    }
+    public static boolean isReplExplicitLoggingMode() {
+    	return !isReplQuietLoggingMode();
     }
 
 }

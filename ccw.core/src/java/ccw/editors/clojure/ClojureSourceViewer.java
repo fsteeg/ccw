@@ -43,7 +43,9 @@ import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Listener;
 import org.eclipse.ui.texteditor.AbstractDecoratedTextEditorPreferenceConstants;
 import org.eclipse.ui.texteditor.AbstractTextEditor;
 import org.eclipse.ui.texteditor.StatusLineContributionItem;
@@ -52,23 +54,19 @@ import ccw.CCWPlugin;
 import ccw.ClojureCore;
 import ccw.preferences.PreferenceConstants;
 import ccw.repl.REPLView;
-import ccw.util.ClojureUtils;
+import ccw.util.ClojureInvoker;
 import ccw.util.DisplayUtil;
-import clojure.osgi.ClojureOSGi;
 
 public abstract class ClojureSourceViewer extends ProjectionViewer implements
         IClojureEditor, IPropertyChangeListener {
     
-    private static final String EDITOR_SUPPORT_NS = "ccw.editors.clojure.editor-support";
-    private static final String HANDLERS_NS = "ccw.editors.clojure.handlers";
-    static {
-    	try {
-			ClojureOSGi.require(CCWPlugin.getDefault().getBundle().getBundleContext(), EDITOR_SUPPORT_NS);
-			ClojureOSGi.require(CCWPlugin.getDefault().getBundle().getBundleContext(), HANDLERS_NS);
-		} catch (Exception e) {
-			throw new RuntimeException(e);
-		}
-    }
+	private static final ClojureInvoker editorSupport = ClojureInvoker.newInvoker(
+            CCWPlugin.getDefault(),
+            "ccw.editors.clojure.editor-support");
+    
+	private static final ClojureInvoker handlers = ClojureInvoker.newInvoker(
+            CCWPlugin.getDefault(),
+            "ccw.editors.clojure.handlers");
 
     /** 
      * Status category used e.g. with TextEditors embedding a ClojureSourceViewer
@@ -95,25 +93,49 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
      */
     private IPreferenceStore fPreferenceStore;
     
-	/**
-	 * This viewer's foreground color.
-	 */
-	private Color fForegroundColor;
-	
-	/**
-	 * The viewer's background color.
-	 */
-	private Color fBackgroundColor;
-	
-	/**
-	 * This viewer's selection foreground color.
-	 */
-	private Color fSelectionForegroundColor;
-	
-	/**
-	 * The viewer's selection background color.
-	 */
-	private Color fSelectionBackgroundColor;
+    public static class EditorColors {
+    	/**
+    	 * This viewer's foreground color.
+    	 */
+    	public Color fForegroundColor;
+    	
+    	/**
+    	 * The viewer's background color.
+    	 */
+    	public Color fBackgroundColor;
+    	
+    	/**
+    	 * This viewer's selection foreground color.
+    	 */
+    	public Color fSelectionForegroundColor;
+    	
+    	/**
+    	 * The viewer's selection background color.
+    	 */
+    	public Color fSelectionBackgroundColor;
+
+    	/**
+    	 * The viewer's background color for the selected line
+    	 */
+		public Color fCurrentLineBackgroundColor;
+
+		public void unconfigure() {
+			fForegroundColor = unconfigure(fForegroundColor);
+			fBackgroundColor = unconfigure(fBackgroundColor= null);
+			fSelectionForegroundColor = unconfigure(fSelectionForegroundColor);
+			fSelectionBackgroundColor = unconfigure(fSelectionBackgroundColor);
+			fCurrentLineBackgroundColor = unconfigure(fCurrentLineBackgroundColor);
+		}
+
+		private Color unconfigure(Color c) {
+			if (c != null) { 
+				c.dispose(); 
+			}
+			return null;
+		}
+    }
+    
+    private EditorColors editorColors = new EditorColors();
 
     /**
      * The source viewer configuration. Needed for property change events
@@ -127,6 +149,8 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
     private boolean fIsConfigured;
 
     private boolean inEscapeSequence;
+    
+    private boolean isContentAssistantActive;
     
 	/**
 	 * Set to true if the editor is in "Strict" Structural editing mode
@@ -165,16 +189,19 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
 	 * is not parseable.
 	 */
 	private boolean structuralEditingPossible;
-
+	
     public ClojureSourceViewer(Composite parent, IVerticalRuler verticalRuler, IOverviewRuler overviewRuler, boolean showAnnotationsOverview, int styles, IPreferenceStore store, IStatusLineHandler statusLineHandler) {
         super(parent, verticalRuler, overviewRuler, showAnnotationsOverview, styles);
         setPreferenceStore(store);
-        
-        getTextWidget().addKeyListener(new KeyListener() {
+
+        KeyListener escListener = new KeyListener() {
             public void keyPressed(KeyEvent e) {
                 if (e.character == SWT.ESC) {
-                    inEscapeSequence = true;
-                    updateTabsToSpacesConverter();
+                	if (!isContentAssistantActive) {
+                		inEscapeSequence = true;
+                		updateTabsToSpacesConverter();
+                		updateStructuralEditingModeStatusField();
+                	}
                 }
             }
 
@@ -182,9 +209,14 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
                 if (inEscapeSequence && !(e.character == SWT.ESC)) {
                     inEscapeSequence = false;
                     updateTabsToSpacesConverter();
+                    updateStructuralEditingModeStatusField();
                 }
             }
-        });
+        };
+        
+        // add before all other listeners so that we're certain we enable/disable 
+        //the Esc key feature based on accurate state information
+        addKeyListenerFirst(getTextWidget(), escListener);
         
         addTextInputListener(new ITextInputListener() {
             public void inputDocumentChanged(IDocument oldInput, IDocument newInput) {
@@ -206,6 +238,29 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
 		isShowRainbowParens = store.getBoolean(ccw.preferences.PreferenceConstants.SHOW_RAINBOW_PARENS_BY_DEFAULT);
 		this.statusLineHandler = statusLineHandler;
 	}
+    
+    private void addKeyListenerFirst(Control control, KeyListener listener) {
+    	Listener[] keyDownListeners = control.getListeners(SWT.KeyDown);
+    	Listener[] keyUpListeners = control.getListeners(SWT.KeyUp);
+    	
+    	removeAll(control, SWT.KeyDown, keyDownListeners);
+    	removeAll(control, SWT.KeyUp, keyUpListeners);
+
+    	control.addKeyListener(listener);
+    	
+    	addAll(control, SWT.KeyDown, keyDownListeners);
+    	addAll(control, SWT.KeyUp, keyUpListeners);
+    }
+    private void removeAll(Control control, int eventType, Listener[] listeners) {
+    	for (Listener listener: listeners) {
+    		control.removeListener(eventType, listener);
+    	}
+    }
+    private void addAll(Control control, int eventType, Listener[] listeners) {
+    	for (Listener listener: listeners) {
+    		control.addListener(eventType, listener);
+    	}
+    }
     
     public static StatusLineContributionItem createStructuralEditionModeStatusContributionItem() {
 		return new StatusLineContributionItem(
@@ -270,71 +325,83 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
      * @return the created color according to the specification in the preference store
      */
     static public Color createColor(IPreferenceStore store, String key, Display display) {
+        RGB rgb = getRGBColor(store, key);
+        return (rgb!= null) ? new Color(display, rgb) : null;
+    }
+    
+    static public RGB getRGBColor(IPreferenceStore store, String key) {
         RGB rgb = null;
 
         if (store.contains(key)) {
-
             if (store.isDefault(key))
                 rgb = PreferenceConverter.getDefaultColor(store, key);
             else
                 rgb = PreferenceConverter.getColor(store, key);
-
-            if (rgb != null)
-                return new Color(display, rgb);
         }
 
-        return null;
+        return rgb;
     }
-    
-	public void initializeViewerColors() {
-		if (fPreferenceStore != null) {
-			StyledText styledText= getTextWidget();
 
+    public void initializeViewerColors() {
+		initializeViewerColors(getTextWidget(), fPreferenceStore, editorColors);
+		if (fPreferenceStore != null) {
+			CCWPlugin.registerEditorColors(fPreferenceStore, getTextWidget().getForeground().getRGB());
+		}
+	}
+	
+	public static void initializeViewerColors(StyledText styledText, IPreferenceStore preferenceStore, EditorColors editorColors) {
+		if (preferenceStore != null) {
 			// ----------- foreground color --------------------
-			Color color= fPreferenceStore.getBoolean(AbstractTextEditor.PREFERENCE_COLOR_FOREGROUND_SYSTEM_DEFAULT)
+			Color color= preferenceStore.getBoolean(AbstractTextEditor.PREFERENCE_COLOR_FOREGROUND_SYSTEM_DEFAULT)
 			? null
-			: createColor(fPreferenceStore, AbstractTextEditor.PREFERENCE_COLOR_FOREGROUND, styledText.getDisplay());
+			: createColor(preferenceStore, AbstractTextEditor.PREFERENCE_COLOR_FOREGROUND, styledText.getDisplay());
 			styledText.setForeground(color);
 
-			if (fForegroundColor != null)
-				fForegroundColor.dispose();
+			if (editorColors.fForegroundColor != null)
+				editorColors.fForegroundColor.dispose();
 
-			fForegroundColor= color;
+			editorColors.fForegroundColor= color;
 
 			// ---------- background color ----------------------
-			color= fPreferenceStore.getBoolean(AbstractTextEditor.PREFERENCE_COLOR_BACKGROUND_SYSTEM_DEFAULT)
+			color= preferenceStore.getBoolean(AbstractTextEditor.PREFERENCE_COLOR_BACKGROUND_SYSTEM_DEFAULT)
 			? null
-			: createColor(fPreferenceStore, AbstractTextEditor.PREFERENCE_COLOR_BACKGROUND, styledText.getDisplay());
+			: createColor(preferenceStore, AbstractTextEditor.PREFERENCE_COLOR_BACKGROUND, styledText.getDisplay());
 			styledText.setBackground(color);
 
-			if (fBackgroundColor != null)
-				fBackgroundColor.dispose();
+			if (editorColors.fBackgroundColor != null)
+				editorColors.fBackgroundColor.dispose();
 
-			fBackgroundColor= color;
+			editorColors.fBackgroundColor= color;
 
 			// ----------- selection foreground color --------------------
-			color= fPreferenceStore.getBoolean(AbstractDecoratedTextEditorPreferenceConstants.EDITOR_SELECTION_FOREGROUND_DEFAULT_COLOR)
+			color= preferenceStore.getBoolean(AbstractDecoratedTextEditorPreferenceConstants.EDITOR_SELECTION_FOREGROUND_DEFAULT_COLOR)
 				? null
-				: createColor(fPreferenceStore, AbstractDecoratedTextEditorPreferenceConstants.EDITOR_SELECTION_FOREGROUND_COLOR, styledText.getDisplay());
+				: createColor(preferenceStore, AbstractDecoratedTextEditorPreferenceConstants.EDITOR_SELECTION_FOREGROUND_COLOR, styledText.getDisplay());
 			styledText.setSelectionForeground(color);
 
-			if (fSelectionForegroundColor != null)
-				fSelectionForegroundColor.dispose();
+			if (editorColors.fSelectionForegroundColor != null)
+				editorColors.fSelectionForegroundColor.dispose();
 
-			fSelectionForegroundColor= color;
+			editorColors.fSelectionForegroundColor= color;
 
 			// ---------- selection background color ----------------------
-			color= fPreferenceStore.getBoolean(AbstractDecoratedTextEditorPreferenceConstants.EDITOR_SELECTION_BACKGROUND_DEFAULT_COLOR)
+			color= preferenceStore.getBoolean(AbstractDecoratedTextEditorPreferenceConstants.EDITOR_SELECTION_BACKGROUND_DEFAULT_COLOR)
 				? null
-				: createColor(fPreferenceStore, AbstractDecoratedTextEditorPreferenceConstants.EDITOR_SELECTION_BACKGROUND_COLOR, styledText.getDisplay());
+				: createColor(preferenceStore, AbstractDecoratedTextEditorPreferenceConstants.EDITOR_SELECTION_BACKGROUND_COLOR, styledText.getDisplay());
 			styledText.setSelectionBackground(color);
 
-			if (fSelectionBackgroundColor != null)
-				fSelectionBackgroundColor.dispose();
+			if (editorColors.fSelectionBackgroundColor != null)
+				editorColors.fSelectionBackgroundColor.dispose();
 
-			fSelectionBackgroundColor= color;
-			
-            CCWPlugin.registerEditorColors(fPreferenceStore, styledText.getForeground().getRGB());
+			editorColors.fSelectionBackgroundColor= color;
+
+			// ---------- current line background color ----------------------
+			color= createColor(preferenceStore, AbstractDecoratedTextEditorPreferenceConstants.EDITOR_CURRENT_LINE_COLOR, styledText.getDisplay());
+
+			if (editorColors.fCurrentLineBackgroundColor != null)
+				editorColors.fCurrentLineBackgroundColor.dispose();
+
+			editorColors.fCurrentLineBackgroundColor= color;
 		}
     }
 
@@ -343,25 +410,8 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
      * @since 3.0
      */
     public void unconfigure() {
-		if (fForegroundColor != null) {
-			fForegroundColor.dispose();
-			fForegroundColor= null;
-		}
 		
-		if (fBackgroundColor != null) {
-			fBackgroundColor.dispose();
-			fBackgroundColor= null;
-		}
-		
-		if (fSelectionForegroundColor != null) {
-			fSelectionForegroundColor.dispose();
-			fSelectionForegroundColor= null;
-		}
-		
-		if (fSelectionBackgroundColor != null) {
-			fSelectionBackgroundColor.dispose();
-			fSelectionBackgroundColor= null;
-		}
+		editorColors.unconfigure();
 		
         if (fPreferenceStore != null)
             fPreferenceStore.removePropertyChangeListener(this);
@@ -370,12 +420,12 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
 			fSelectionHistory.dispose();
 			fSelectionHistory = null;
 		}
-
+		
         super.unconfigure();
         fIsConfigured= false;
         fConfiguration = null;
     }
-
+    
     /** This is manipulated by clojure functions.
      * It's a ref, holding a map {:text "the raw text file" :parser parser}
      * where state is a future holding the parser's state
@@ -398,9 +448,9 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
     
     private void updateTextBuffer (String finalText, long offset, long length, String text) {
     	boolean firstTime = (parseState == null);
-    	parseState = ClojureUtils.invoke(EDITOR_SUPPORT_NS, "updateTextBuffer",parseState, finalText, offset, length, text);
+    	parseState = editorSupport._("updateTextBuffer",parseState, finalText, offset, length, text);
         if (firstTime) {
-        	ClojureUtils.invoke(EDITOR_SUPPORT_NS, "startWatchParseRef", parseState, this);
+        	editorSupport._("startWatchParseRef", parseState, this);
         }
     }
     
@@ -410,18 +460,18 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
         	String text = getDocument().get();
             updateTextBuffer(text, 0, -1, text);
         }
-        return ClojureUtils.invoke(EDITOR_SUPPORT_NS, "getParseState", getDocument().get(), parseState);
+        return editorSupport._("getParseState", getDocument().get(), parseState);
     }
     
     public boolean isParseTreeBroken() {
-    	return (Boolean) ClojureUtils.invoke(EDITOR_SUPPORT_NS, "brokenParseTree?", getParseState());
+    	return (Boolean) editorSupport._("brokenParseTree?", getParseState());
     }
     
     public Object getPreviousParseTree () {
         if (parseState == null) {
         	return null;
         } else {
-        	return ClojureUtils.invoke(EDITOR_SUPPORT_NS, "getPreviousParseTree", parseState);
+        	return editorSupport._("getPreviousParseTree", parseState);
         }
     }
     
@@ -437,7 +487,7 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
     	DisplayUtil.asyncExec(new Runnable() {
 			public void run() {
 				getTextWidget().setBackground(
-						structuralEditionPossible ? fBackgroundColor : Display.getCurrent().getSystemColor(SWT.COLOR_GRAY));
+						structuralEditionPossible ? editorColors.fBackgroundColor : Display.getCurrent().getSystemColor(SWT.COLOR_GRAY));
 				getTextWidget().setToolTipText(structuralEditionPossible ? null : "Unparseable source code. Structural Edition temporarily disabled.");
 			}
 		});
@@ -484,7 +534,7 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
     }
     
     public String findDeclaringNamespace() {
-		return ClojureCore.findDeclaringNamespace((Map) ClojureUtils.invoke(EDITOR_SUPPORT_NS, "getParseTree", getParseState()));
+		return ClojureCore.findDeclaringNamespace((Map) editorSupport._("getParseTree", getParseState()));
     }
 
     public IJavaProject getAssociatedProject() {
@@ -638,16 +688,15 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
 			
 		StatusLineContributionItem field = this.statusLineHandler.getEditingModeStatusContributionItem();
 		if (field != null) {
-			String text = (isStructuralEditingEnabled() ? "strict/paredit" : "unrestricted") + " edit mode";
-			field.setText(text == null ? fErrorLabel : text);
+			field.setText((isStructuralEditingEnabled() ? "strict/paredit" : "unrestricted")
+			              + " edit mode" + (inEscapeSequence ? " ESC" : ""));
 			field.setToolTipText(
 					(isStructuralEditingEnabled() 
-							? "strict/paredit edit mode:\neditor does its best to prevent you from breaking the structure of the code (requires you to know shortcut commands well).\nClick to switch to unrestricted edit mode."
-						    : "unrestricted edit mode:\nhelps you with edition, but does not get in your way.\nClick to switch to strict/paredit edit mode."));
+							? "strict/paredit edit mode:\neditor does its best to prevent you from breaking the structure of the code (requires you to know shortcut commands well)."
+						    : "unrestricted edit mode:\nhelps you with edition, but does not get in your way."));
 		}
 	}
 
-	
 	/*
 	 * Eclipse TextEditor framework uses old "Action" framework. So it is impossible
 	 * to use handlers declaratively, one must plug the new behaviour via code,
@@ -662,7 +711,7 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
 	public void doOperation(int operation) {
 		if (operation == TextViewer.PASTE) {
 			if (!getTextWidget().getBlockSelection()) {
-				ClojureUtils.invoke(HANDLERS_NS, "smart-paste", this);
+				handlers._("smart-paste", this);
 				return;
 			} else {
 				// We're not trying (at least yet) to handle paste inside
@@ -687,4 +736,14 @@ public abstract class ClojureSourceViewer extends ProjectionViewer implements
 	public boolean isEscapeInStringLiteralsEnabled() {
 		return fPreferenceStore.getBoolean(PreferenceConstants.EDITOR_ESCAPE_ON_PASTE);
 	}
+
+	public boolean isContentAssistantActive() {
+		return isContentAssistantActive;
+	}
+
+	public void setContentAssistantActive(boolean isContentAssistantActive) {
+		this.isContentAssistantActive = isContentAssistantActive;
+	}
+
+	
 }

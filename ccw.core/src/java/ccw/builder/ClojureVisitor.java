@@ -62,7 +62,7 @@ public class ClojureVisitor implements IResourceVisitor {
 //    				System.out.println("compiling:'" + maybeLibName + "'");
     				String compileLibCommand = CompileLibAction.compileLibCommand(maybeLibName);
 //    				System.out.println("Sending command: '" + compileLibCommand + "'");
-					Response res = repl.send(compileLibCommand);
+					Response res = repl.send("op", "eval", "code", compileLibCommand);
 //					System.out.println("compilation response: '" + res + "'");
 					if (res.values().isEmpty()) {
 //						System.out.println(("oops, weird error when compiling '" + maybeLibName + "'"));
@@ -100,7 +100,8 @@ public class ClojureVisitor implements IResourceVisitor {
 					}
     			}
 		    } catch (Exception e) {
-		        throw new WorkbenchException("Could not visit: " + clojureLibs, e);
+		        throw new WorkbenchException(
+		        		String.format("Could not visit: %s.\nDid you kill the project's JVM during the build?", clojureLibs), e);
 		    }
 		}
 	}
