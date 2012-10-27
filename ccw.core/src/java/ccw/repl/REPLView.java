@@ -1,6 +1,17 @@
 package ccw.repl;
 
+import static ccw.CCWPlugin.getTracer;
+
+import java.io.IOException;
 import java.net.ConnectException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
@@ -12,6 +23,7 @@ import org.eclipse.core.runtime.Platform;
 import org.eclipse.debug.core.ILaunch;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IStatusLineManager;
+import org.eclipse.jface.dialogs.InputDialog;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.resource.JFaceResources;
@@ -38,11 +50,14 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Listener;
+import org.eclipse.ui.IViewSite;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchWindow;
+import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.IConsole;
+import org.eclipse.ui.contexts.IContextActivation;
 import org.eclipse.ui.contexts.IContextService;
 import org.eclipse.ui.handlers.IHandlerService;
 import org.eclipse.ui.internal.editors.text.EditorsPlugin;
@@ -51,35 +66,35 @@ import org.eclipse.ui.texteditor.SourceViewerDecorationSupport;
 import org.eclipse.ui.texteditor.StatusLineContributionItem;
 
 import ccw.CCWPlugin;
+import ccw.TraceOptions;
 import ccw.editors.clojure.ClojureDocumentProvider;
 import ccw.editors.clojure.ClojureSourceViewer;
 import ccw.editors.clojure.ClojureSourceViewerConfiguration;
 import ccw.editors.clojure.IClojureEditor;
 import ccw.editors.clojure.IClojureEditorActionDefinitionIds;
 import ccw.preferences.PreferenceConstants;
-import ccw.util.ClojureUtils;
+import ccw.util.ClojureInvoker;
 import ccw.util.DisplayUtil;
-import clojure.lang.Atom;
+import ccw.util.TextViewerSupport;
 import clojure.lang.IFn;
 import clojure.lang.Keyword;
-import clojure.lang.PersistentTreeMap;
+import clojure.lang.PersistentHashMap;
 import clojure.lang.Symbol;
 import clojure.lang.Var;
 import clojure.osgi.ClojureOSGi;
 import clojure.tools.nrepl.Connection;
+import clojure.tools.nrepl.Connection.Response;
 
 public class REPLView extends ViewPart implements IAdaptable {
-    private static final String EDITOR_SUPPORT_NS = "ccw.editors.clojure.editor-support";
-    private static final String CLOJURE_STRING_NS = "clojure.string";
-    static {
-    	try {
-			ClojureOSGi.require(CCWPlugin.getDefault().getBundle().getBundleContext(), EDITOR_SUPPORT_NS);
-			ClojureOSGi.require(CCWPlugin.getDefault().getBundle().getBundleContext(), CLOJURE_STRING_NS);
-		} catch (Exception e) {
-			throw new RuntimeException(e);
-		}
-    }
+
+	private static final ClojureInvoker editorSupport = ClojureInvoker.newInvoker(
+            CCWPlugin.getDefault(),
+            "ccw.editors.clojure.editor-support");
     
+	private static final ClojureInvoker str = ClojureInvoker.newInvoker(
+            CCWPlugin.getDefault(),
+            "clojure.string");
+
 	/* Keep this in sync with the context defined in plugin.xml */
 	public static final String CCW_UI_CONTEXT_REPL = "ccw.ui.context.repl";
 	
@@ -88,13 +103,50 @@ public class REPLView extends ViewPart implements IAdaptable {
 
     private static Var log;
     private static Var configureREPLView;
+    private static Var handleResponses;
     static {
         try {
             ClojureOSGi.require(CCWPlugin.getDefault().getBundle().getBundleContext(), "ccw.repl.view-helpers");
             log = Var.find(Symbol.intern("ccw.repl.view-helpers/log"));
             configureREPLView = Var.find(Symbol.intern("ccw.repl.view-helpers/configure-repl-view"));
+            handleResponses = Var.find(Symbol.intern("ccw.repl.view-helpers/handle-responses"));
         } catch (Exception e) {
             CCWPlugin.logError("Could not initialize view helpers.", e);
+        }
+    }
+
+    /**
+     * This misery around secondary IDs is due to the fact that:
+     * eclipse really, really wants views to be pre-defined; while you can have a view type that
+     * has multiple instances, doing so requires having *stable* secondary IDs in order for the
+     * IDE to retain positioning and size preferences.
+     * We could just use UUIDs to identify different REPL views, but that means no position info
+     * will be retained.  We could use nREPL URLs, but those are almost as bad as UUIDs insofar as
+     * the autoselected ports are hardly ever used twice.
+     * Try as I might, I cannot find a way to get a view to (a) be displayed in a particular place
+     * in the IDE (short of defining a Clojure perspective!) or (b) be notified of when a REPL
+     * view is moved to begin with.
+     * 
+     * This approach will result in a user "training" the IDE where to put REPL views
+     * (with seemingly intransigent or arbitrary behaviour to start); eventually, REPLs will
+     * all end up displaying in the desired location.
+     */
+    private static Set<String> SECONDARY_VIEW_IDS = new TreeSet<String>() {{
+       // no one will create more than 1000 REPLs at a time, right? :-P
+       for (int i = 0; i < 1000; i++) add(String.format("%03d", i)); 
+    }};
+    private static String getSecondaryId () {
+        synchronized (SECONDARY_VIEW_IDS) {
+            String id = SECONDARY_VIEW_IDS.iterator().next();
+            SECONDARY_VIEW_IDS.remove(id);
+            return id;
+        }
+    }
+    private static void releaseSecondaryId (String id) {
+    	assert id != null;
+    	
+        synchronized (SECONDARY_VIEW_IDS) {
+            SECONDARY_VIEW_IDS.add(id);
         }
     }
     
@@ -108,6 +160,8 @@ public class REPLView extends ViewPart implements IAdaptable {
     //     so that we can have one range that is still *highlighted* for clojure content (and not editable),
     //     and another range that is editable and has full paredit, code completion, etc.
     StyledText logPanel;
+    /** record for colors used in logPanel */
+    public final ClojureSourceViewer.EditorColors logPanelEditorColors = new ClojureSourceViewer.EditorColors();
     private ClojureSourceViewer viewer;
     public StyledText viewerWidget; // public only to simplify interop with helpers impl'd in Clojure
     private ClojureSourceViewerConfiguration viewerConfig;
@@ -125,8 +179,10 @@ public class REPLView extends ViewPart implements IAdaptable {
     private ILaunch launch;
     
     private String currentNamespace = "user";
-    private final Atom requests = new Atom(PersistentTreeMap.EMPTY);
+    private Map<String, Object> describeInfo;
     private IFn evalExpression;
+    private String sessionId;
+    private String secondaryId;
     
     /* function implementing load previous/next command from history into input area */
     private IFn historyActionFn;
@@ -140,8 +196,17 @@ public class REPLView extends ViewPart implements IAdaptable {
     
     private SourceViewerDecorationSupport fSourceViewerDecorationSupport;
 	private StatusLineContributionItem structuralEditionModeStatusContributionItem;
+
+	/** Eclipse Preferences Listener */ 
+	private IPropertyChangeListener prefsListener;
     
-    public REPLView () {}
+    public REPLView () {}    
+    
+    @Override
+    public void init(IViewSite site) throws PartInitException {
+    	super.init(site);
+        activeREPL.set(REPLView.this);
+    }
     
     private void resetFont () {
         Font font= JFaceResources.getTextFont();
@@ -154,7 +219,7 @@ public class REPLView extends ViewPart implements IAdaptable {
         s.setText(boostIndent.matcher(s.getText()).replaceAll("   ").replaceFirst("^\\s+", "=> "));
         int start = logPanel.getCharCount();
         try {
-            log.invoke(logPanel, s.getText(), inputExprLogType);
+            log.invoke(this, logPanel, s.getText(), inputExprLogType);
             for (StyleRange sr : s.getStyleRanges()) {
                 sr.start += start;
                 logPanel.setStyleRange(sr);
@@ -166,7 +231,7 @@ public class REPLView extends ViewPart implements IAdaptable {
     }
     
     private String removeTrailingSpaces(String s) {
-    	return (String) ClojureUtils.invoke(CLOJURE_STRING_NS, "trimr", s);
+    	return (String) str._("trimr", s);
     }
     private void evalExpression () {
     	// We remove trailing spaces so that we do not embark extra spaces,
@@ -185,16 +250,43 @@ public class REPLView extends ViewPart implements IAdaptable {
     public void evalExpression (String s, boolean userInput, boolean logExpression) {
         try {
             if (s.trim().length() > 0) {
-                if (logExpression) log.invoke(logPanel, s, inputExprLogType);
+                if (logExpression) log.invoke(this, logPanel, s, inputExprLogType);
                 evalExpression.invoke(s, userInput);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            CCWPlugin.logError(e);
         }
     }
 
     public void printErrorDetail() {
-        evalExpression("(binding [*out* *err*] (if-not *e (println \"No prior exception bound to *e.\") (clojure.tools.nrepl/*print-error-detail* *e)))", false, false);
+        evalExpression("(binding [*out* *err*] (if-not *e (println \"No prior exception bound to *e.\") (clojure.repl/pst *e)))", false, false);
+    }
+
+    public void sendInterrupt() {
+        log.invoke(this, logPanel, ";; Interrupting...", inputExprLogType);
+        evalExpression.invoke(PersistentHashMap.create("op", "interrupt"), false);
+    }
+    
+    public void getStdIn () {
+        InputDialog dlg = new InputDialog(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(),
+                "Input requested", String.format("A REPL expression sent to %s requires a line of *in* input:",
+                        interactive.url), "", null);
+        // no conditional here; what else would we do if they canceled the dialog?
+        // Just a recipe for *requiring* an interrupt...?
+        dlg.open();
+        evalExpression.invoke(PersistentHashMap.create("op", "stdin", "stdin", dlg.getValue() + "\n"), false);
+    }
+    
+    /**
+     * Echos appropriate content to the log area for an nREPL
+     * Response provoked by an expression.
+     * 
+     * @deprecated this should no longer be needed; view_helpers.clj
+     * sets up a future that will handle all responses on a REPL's
+     * session
+     */
+    public void handleResponse (Response resp, String expression) {
+        handleResponses.invoke(this, logPanel, expression, resp.seq());        
     }
     
     public void closeView () throws Exception {
@@ -211,14 +303,14 @@ public class REPLView extends ViewPart implements IAdaptable {
     public void reconnect () throws Exception {
         closeConnections();
         logPanel.append(";; Reconnecting...\n");
-        configure(interactive.host, interactive.port);
+        configure(interactive.url);
     }
     
     public void setCurrentNamespace (String ns) {
         // TODO waaaay better to put a dropdown namespace chooser in the view's toolbar,
         // and this would just change its selection
     	currentNamespace = ns;
-        setPartName(String.format("REPL @ %s:%s (%s)", interactive.host, interactive.port, currentNamespace));
+        setPartName(String.format("REPL @ %s (%s)", interactive.url, currentNamespace));
     }
     
     public String getCurrentNamespace () {
@@ -226,22 +318,25 @@ public class REPLView extends ViewPart implements IAdaptable {
     }
     
     private void prepareView () throws Exception {
-        evalExpression = (IFn)configureREPLView.invoke(this, logPanel, interactive.conn, requests);
+        sessionId = interactive.newSession(null);
+        evalExpression = (IFn)configureREPLView.invoke(this, logPanel, interactive.client, sessionId);
     }
     
     @SuppressWarnings("unchecked")
-    public boolean configure (String host, int port) throws Exception {
+    public boolean configure (String url) throws Exception {
         try {
-            interactive = new Connection(host, port);
-            toolConnection = new Connection(host, port);
+            // TODO — don't need multiple connections anymore, just separate sessions will do.
+            interactive = new Connection(url);
+            toolConnection = new Connection(url);
             setCurrentNamespace(currentNamespace);
             prepareView();
-            logPanel.append(";; Clojure " + toolConnection.send("(clojure-version)").values().get(0) + "\n");
+            logPanel.append(";; Clojure " + toolConnection.send("op", "eval", "code", "(clojure-version)").values().get(0) + "\n");
+            NamespaceBrowser.setREPLConnection(toolConnection);
             return true;
         } catch (ConnectException e) {
             closeView();
             MessageDialog.openInformation(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(),
-                    "Could not connect", String.format("Could not connect to REPL @ %s:%s", host, port));
+                    "Could not connect", String.format("Could not connect to REPL @ %s", url));
             return false;
         }
     }
@@ -260,22 +355,27 @@ public class REPLView extends ViewPart implements IAdaptable {
                         "Invalid connection info",
                         "You must provide a useful hostname and port number to connect to a REPL.");
             } else {
-                repl = connect(host, port);
+                repl = connect(String.format("nrepl://%s:%s", host, port));
             }
         }
         
         return repl;
     }
     
-    public static REPLView connect (String host, int port) throws Exception {
-        return connect(host, port, null, null);
+    public static REPLView connect (String url) throws Exception {
+        return connect(url, null, null);
     }
     
-    public static REPLView connect (String host, int port, IConsole console, ILaunch launch) throws Exception {
-        REPLView repl = (REPLView)PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage().showView(VIEW_ID, host + "@" + port, IWorkbenchPage.VIEW_ACTIVATE);
+    public static REPLView connect (String url, IConsole console, ILaunch launch) throws Exception {
+        String secondaryId;
+        REPLView repl = (REPLView)PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage().showView(
+                VIEW_ID,
+                secondaryId = getSecondaryId(),
+                IWorkbenchPage.VIEW_ACTIVATE);
+        repl.secondaryId = secondaryId;
         repl.console = console;
         repl.launch = launch;
-        return repl.configure(host, port) ? repl : null;
+        return repl.configure(url) ? repl : null;
     }
     
     public Connection getConnection () {
@@ -284,6 +384,31 @@ public class REPLView extends ViewPart implements IAdaptable {
     
     public Connection getToolingConnection () {
         return toolConnection;
+    }
+    
+    public String getSessionId () {
+        return sessionId;
+    }
+    
+    public Set<String> getAvailableOperations () throws IllegalStateException {
+        if (describeInfo == null) {
+            Response r = toolConnection.send("op", "describe");
+            // working around the fact that nREPL < 0.2.0-beta9 does *not* send a
+            // :done status when an operation is unknown!
+            // TODO remove this and just check r.statuses() after we can assume usage
+            // of later versions of nREPL
+            Object status = ((Map<String, String>)r.seq().first()).get(Keyword.intern("status"));
+            if (clojure.lang.Util.equals(status, "unknown-op") || (status instanceof Collection &&
+                    ((Collection)status).contains("error"))) {
+                CCWPlugin.logError("Invalid response to \"describe\" request");
+                describeInfo = new HashMap();
+            } else {
+                describeInfo = r.combinedResponse();
+            }
+        }
+        
+        Map<String, Object> ops = (Map<String, Object>)describeInfo.get("ops");
+        return ops == null ? new HashSet() : ops.keySet();
     }
     
     /**
@@ -308,7 +433,7 @@ public class REPLView extends ViewPart implements IAdaptable {
 
     @Override
     public void createPartControl(Composite parent) {
-        IPreferenceStore prefs = getPreferences();
+        final IPreferenceStore prefs = getPreferences();
         
         SashForm split = new SashForm(parent, SWT.VERTICAL);
         
@@ -316,6 +441,16 @@ public class REPLView extends ViewPart implements IAdaptable {
         logPanel.setIndent(4);
         logPanel.setEditable(false);
         logPanel.setFont(JFaceResources.getFont(JFaceResources.TEXT_FONT));
+        
+        // Enables logPanel to have same background, etc. colors than clojure
+        // editors.
+		ClojureSourceViewer.initializeViewerColors(logPanel, prefs, logPanelEditorColors);
+		logPanel.addDisposeListener(new DisposeListener() {
+			@Override
+			public void widgetDisposed(DisposeEvent e) {
+				logPanelEditorColors.unconfigure();
+			}
+		});
         
         structuralEditionModeStatusContributionItem = ClojureSourceViewer.createStructuralEditionModeStatusContributionItem();
         viewer = new ClojureSourceViewer(split, null, null, false, SWT.V_SCROLL | SWT.H_SCROLL, prefs,
@@ -350,6 +485,10 @@ public class REPLView extends ViewPart implements IAdaptable {
         };
         viewerConfig = new ClojureSourceViewerConfiguration(prefs, viewer);
         viewer.configure(viewerConfig);
+        
+        // Adds support for undo, redo, context information, etc.
+        new TextViewerSupport(viewer, getHandlerService());
+        
         getViewSite().setSelectionProvider(viewer);
         viewer.setDocument(ClojureDocumentProvider.configure(new Document()));
         viewerWidget = viewer.getTextWidget();
@@ -359,7 +498,14 @@ public class REPLView extends ViewPart implements IAdaptable {
 		// ensure decoration support has been created and configured.
 		getSourceViewerDecorationSupport(viewer).install(prefs);
 
-
+		prefsListener = new IPropertyChangeListener() {
+			@Override
+			public void propertyChange(PropertyChangeEvent event) {
+				initializeLogPanelColors();
+			}
+		};
+		prefs.addPropertyChangeListener(prefsListener);
+		
         // push all keyboard input delivered to log panel into input widget
         logPanel.addListener(SWT.KeyDown, new Listener() {
             public void handleEvent(Event e) {
@@ -411,28 +557,9 @@ public class REPLView extends ViewPart implements IAdaptable {
         viewer.propertyChange(null);
         
         viewerWidget.addFocusListener(new NamespaceRefreshFocusListener());
-        
+        viewerWidget.addFocusListener(new ViewContextActivationListener());
         logPanel.addFocusListener(new NamespaceRefreshFocusListener());
-        
-        parent.addDisposeListener(new DisposeListener () {
-            public void widgetDisposed(DisposeEvent e) {
-                activeREPL.compareAndSet(REPLView.this, null);
-            }
-        });
-        
-        /*
-         * TODO find a way for the following code line to really work. That is add
-         * the necessary additional code for enabling "handlers" (in fact, my fear
-         * is that those really are not handlers but "actions" that will need to be
-         * manually enabled as I did above for EVALUATE_TOP_LEVEL_S_EXPRESSION :-( )
-         */
-        ((IContextService) getSite().getService(IContextService.class)).activateContext("org.eclipse.ui.textEditorScope");
-
-        /* Thought just activating CCW_UI_CONTEXT_REPL would also activate its parent contexts
-         * but apparently not, so here we activate explicitly all the contexts we want (FIXME?)
-         */ 
-        ((IContextService) getSite().getService(IContextService.class)).activateContext(IClojureEditor.KEY_BINDING_SCOPE); 
-        ((IContextService) getSite().getService(IContextService.class)).activateContext(CCW_UI_CONTEXT_REPL);
+        logPanel.addFocusListener(new ViewContextActivationListener());
         
         split.setWeights(new int[] {100, 75});
         
@@ -447,6 +574,20 @@ public class REPLView extends ViewPart implements IAdaptable {
        
         resetFont();
         JFaceResources.getFontRegistry().addListener(fontChangeListener);
+        parent.addDisposeListener(new DisposeListener() {
+			@Override
+			public void widgetDisposed(DisposeEvent e) {
+				CCWPlugin.getTracer().trace(TraceOptions.REPL, "REPLView ", REPLView.this.secondaryId, " parent composite disposed");
+				JFaceResources.getFontRegistry().removeListener(fontChangeListener);
+				prefs.removePropertyChangeListener(prefsListener);
+				activeREPL.compareAndSet(REPLView.this, null);
+			}
+		});
+    }
+    
+    private void initializeLogPanelColors() {
+		ClojureSourceViewer.initializeViewerColors(logPanel, getPreferences(), logPanelEditorColors);
+    	
     }
     
     private interface MessageProvider {
@@ -545,6 +686,9 @@ public class REPLView extends ViewPart implements IAdaptable {
 						&& noSelection() 
 						&& textAfterCaret().trim().isEmpty()
 						&& !viewer.isParseTreeBroken()) {
+					
+					final String widgetText = viewerWidget.getText();
+					
 					// Executing evalExpression() via SWT's asyncExec mechanism,
 					// we ensure all the normal behaviour is done by the Eclipse
 					// framework on the Enter key, before sending the code.
@@ -553,21 +697,67 @@ public class REPLView extends ViewPart implements IAdaptable {
 					// with the selection before being sent for evaluation.
 					DisplayUtil.asyncExec(new Runnable() {
 						public void run() {
-							evalExpression();
+							// we do not execute auto eval if some non-blank text has
+							// been added between the check and the execution
+							final String text = viewerWidget.getText();
+							int idx = text.indexOf(widgetText);
+							if (idx == 0 && text.substring(widgetText.length()).trim().isEmpty()) {
+								evalExpression();
+							}
 						}});
 				} 
 			}
         });
     }
     
+    IHandlerService getHandlerService() {
+        return (IHandlerService) getViewSite().getService(IHandlerService.class);
+    }
+    
     private void installEvalTopLevelSExpressionCommand() {
-        IHandlerService handlerService = (IHandlerService) getViewSite().getService(IHandlerService.class);
-        handlerService.activateHandler(IClojureEditorActionDefinitionIds.EVALUATE_TOP_LEVEL_S_EXPRESSION, new AbstractHandler() {
+        getHandlerService().activateHandler(IClojureEditorActionDefinitionIds.EVALUATE_TOP_LEVEL_S_EXPRESSION, new AbstractHandler() {
     		public Object execute(ExecutionEvent event) throws ExecutionException {
     			evalExpression();
     			return null;
     		}
     	});
+    }
+    
+    /**
+     * This exists solely to work around what can only be considered a bug in Eclipse starting
+     * with Juno (I20120608-1400 FWIW), where views that can have multiple simultaneous instances
+     * (of which REPLView is one) cannot share activated contexts.  This means that actions
+     * bound to a given context will appear as active in one view, but not in another.
+     */
+    private class ViewContextActivationListener implements FocusListener {
+        private List<IContextActivation> activations = new ArrayList();
+        
+        public void focusLost(FocusEvent e) {
+            for (IContextActivation activation : activations) {
+                ((IContextService)getSite().getService(IContextService.class)).deactivateContext(activation);
+            }
+            activations = new ArrayList();
+        }
+        
+        private void activate (String contextId) {
+            activations.add(((IContextService)getSite().getService(IContextService.class)).activateContext(contextId));
+        }
+        
+        public void focusGained(FocusEvent e) {
+            /*
+             * TODO find a way for the following code line to really work. That is add
+             * the necessary additional code for enabling "handlers" (in fact, my fear
+             * is that those really are not handlers but "actions" that will need to be
+             * manually enabled as I did above for EVALUATE_TOP_LEVEL_S_EXPRESSION :-( )
+             */
+            activate("org.eclipse.ui.textEditorScope");
+
+            /* Thought just activating CCW_UI_CONTEXT_REPL would also activate its parent contexts
+             * but apparently not, so here we activate explicitly all the contexts we want (FIXME?)
+             */ 
+            activate(IClojureEditor.KEY_BINDING_SCOPE);
+            activate(CCW_UI_CONTEXT_REPL);
+        }
     }
     
 	/**
@@ -585,7 +775,7 @@ public class REPLView extends ViewPart implements IAdaptable {
 					null/*getAnnotationAccess()*/, 
 					EditorsPlugin.getDefault().getSharedTextColors()/*getSharedColors()*/
 					);
-			ClojureUtils.invoke(EDITOR_SUPPORT_NS, "configureSourceViewerDecorationSupport",
+			editorSupport._("configureSourceViewerDecorationSupport",
 					fSourceViewerDecorationSupport, viewer);
 		}
 		return fSourceViewerDecorationSupport;
@@ -594,15 +784,19 @@ public class REPLView extends ViewPart implements IAdaptable {
     @Override
     public void dispose() {
         super.dispose();
-        fSourceViewerDecorationSupport = (SourceViewerDecorationSupport) ClojureUtils.invoke(EDITOR_SUPPORT_NS, "disposeSourceViewerDecorationSupport",
+
+        if (secondaryId != null) {
+        	releaseSecondaryId(secondaryId);
+        }
+        
+        fSourceViewerDecorationSupport = (SourceViewerDecorationSupport) editorSupport._("disposeSourceViewerDecorationSupport",
         		fSourceViewerDecorationSupport);
-        if (interactive != null) {
-        	interactive.close();
+        try {
+            if (interactive != null) interactive.close();
+            if (toolConnection != null) toolConnection.close();
+        } catch (IOException e) {
+            CCWPlugin.logError(e);
         }
-        if (toolConnection != null) {
-        	toolConnection.close();
-        }
-        JFaceResources.getFontRegistry().removeListener(fontChangeListener);
     }
 
     public boolean isDisposed () {
@@ -618,6 +812,7 @@ public class REPLView extends ViewPart implements IAdaptable {
 
     private final class NamespaceRefreshFocusListener implements FocusListener {
         public void focusGained(FocusEvent e) {
+        	getTracer().trace(TraceOptions.REPL_FOCUS, "focus gained, marking repl as active");
             activeREPL.set(REPLView.this);
             NamespaceBrowser.setREPLConnection(toolConnection);
         }
@@ -633,4 +828,5 @@ public class REPLView extends ViewPart implements IAdaptable {
     		return super.getAdapter(adapter);
     	}
     }
+    
 }
